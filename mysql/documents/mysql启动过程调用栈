@@ -1,0 +1,7 @@
+innodb_init(void * p) (/root/mysql-8.0.20/storage/innobase/handler/ha_innodb.cc:4652)
+ha_initialize_handlerton(st_plugin_int * plugin) (/root/mysql-8.0.20/sql/handler.cc:768)
+plugin_initialize(st_plugin_int * plugin) (/root/mysql-8.0.20/sql/sql_plugin.cc:1274)
+plugin_register_builtin_and_init_core_se(int * argc, char ** argv) (/root/mysql-8.0.20/sql/sql_plugin.cc:1580)
+init_server_components() (/root/mysql-8.0.20/sql/mysqld.cc:5540)
+mysqld_main(int argc, char ** argv) (/root/mysql-8.0.20/sql/mysqld.cc:6685)
+main(int argc, char ** argv) (/root/mysql-8.0.20/sql/main.cc:25)
