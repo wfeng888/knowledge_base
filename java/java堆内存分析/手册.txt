@@ -1,0 +1,3 @@
+使用jdk自带工具jvisualvm.exe（本地GUI工具） + jstatd(远程 RMI server application)
+
+jstatd:https://docs.oracle.com/javase/7/docs/technotes/tools/share/jstatd.html
