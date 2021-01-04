@@ -1,0 +1,2 @@
+获取两个hash（时间点之间的差异脚本名称，以及差异类型）
+git diff --name-status "cf446aa965dc03558754a2c3a17a0e007b2ada21"  "3fbae9f0209601f5a469307301292370ddf7ad8d"
