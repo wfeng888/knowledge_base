@@ -1,0 +1,20 @@
+
+8.0，通过preformance_schema.replica%性能视图
+
+5.7多线程复制，只能通过gtid变化量，doc1023278.1：
+	1，I/O thread behind replication master
+		-- SELECT GTID_SUBTRACT(GTID_SUBTRACT(GTIDs executed on replication master, GTIDs received on replication slave), GTIDs purged on the replication slave)
+		SELECT GTID_SUBTRACT(GTID_SUBTRACT('96985d6f-2ebc-11e7-84df-08002715584a:1-134', '96985d6f-2ebc-11e7-84df-08002715584a:26-133'), @@global.gtid_purged) AS MissingGTIDs;
+	2，SQL thread behind replication master:
+		-- SELECT GTID_SUBTRACT(GTID_SUBTRACT(GTIDs executed on replication master, GTIDs executed on replication slave), GTIDs purged on the replication slave)
+		slave> SELECT GTID_SUBTRACT(GTID_SUBTRACT('96985d6f-2ebc-11e7-84df-08002715584a:5-134', '96985d6f-2ebc-11e7-84df-08002715584a:26-132'), @@global.gtid_purged) AS MissingGTIDs;
+	3，SQL thread behind I/O thread
+		-- SELECT GTID_SUBTRACT(GTIDs executed on replication master, GTIDs executed on replication slave)
+		slave> SELECT GTID_SUBTRACT('96985d6f-2ebc-11e7-84df-08002715584a:5-133', '96985d6f-2ebc-11e7-84df-08002715584a:26-132') AS MissingGTIDs;
+
+
+
+		slave> SELECT GTID_SUBTRACT(RECEIVED_TRANSACTION_SET, @@global.gtid_executed) AS MissingGTIDs,
+              IF(GTID_SUBTRACT(RECEIVED_TRANSACTION_SET, @@global.gtid_executed) = '', 'YES', 'NO') AS CaughtUp
+         FROM performance_schema.replication_connection_status;
+
