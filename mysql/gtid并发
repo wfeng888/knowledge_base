@@ -1,0 +1,36 @@
+1，并发GTID处理：
+如果一个给定gtid标识的事务开始执行，在提交或者回滚之前，任何相同gtid标识的并发事务都被block住。如果正在执行的事务回滚，在并发事务的其中一个接着执行。如果正在执行的事务成功提交，则当前被block的并发事务被auto-skip自动跳过，没有错误信息报告。
+
+2，GTID结构
+GTID = source_id:transaction_id
+其中，source_id为产生gtid的server的@@server_uuid。transaction_id为从1开始的有符号64位连续正整数，最大值2的63次方-1。当transaction_id用尽，server的行为受binlog_error_action参数指定。此参数取值为 ABORT_SERVER|IGNORE_ERROR ，默认 ABORT_SERVER 。表示当server遇到binlog写入错误的时候，如何处理。
+
+3，GTID产生
+当一个事务在源server上被提交（客户端事务 client transaction , 相对的，在副本数据库上重放的事务称为 复制事务 ， replicated transactin  ）， 并且此事务被写入binlog中（ 有些事务因为被过滤掉了， 或者是只读事务， 因此没有写入binlog的不在此列 ）， 则一个唯一的GTID（ @@server_id:sequence number ） 被产生并关联到此事务上。 GTID在事务被提交时产生，意味着，客户端事务在产生时，是没有与之对应的gtid值的。
+对于采用gtid的复制事务，在事务在从库上开始运行前，此事务的gtid已经存在了，并且赋值到session范围的gtid_next上。此时，无论此事务是否写入从服务器的binlog（从库或者没有启用binlog，或者没有启用log_slave_update，或者此事务被过滤掉等原因），此事务的gtid都会记录（用于根据已执行的gtid集合来判断新的复制事务是否需要在从库上执行，以及复制线程重新启动时，用于判断从主库接续复制位点）
+
+4， mysql.gtid_executed 表
+mysql.gtid_executed主要的用途在于，当主库/从库binlog日志丢失，或者当副本干脆没有启用binlog记录时，可以保存数据库执行的事务的记录。
+首先，GTID需要写入mysql.gtid_executed的前提条件是GTID_MODE变量设置为ON/ON_PERMISSIVE；
+其次，主库如果不启用binlog日志记录，那么根本就不会有gtid产生，自然也不会记录mysql.gtid_executed表了。
+mysql.gtid_executed有两种写入模式：
+a，事务提交时写入。（首先，只需要将写入mysql.gtid_executed与用户事务置于同一个两阶段事务内即可。具体的实现，需要查阅源码才能确定，这里留一个坑。）
+   适用条件：
+          *）从库（复制事务），没有启用binlog日志记录或者log_slave_updates禁用；
+          *）从库（复制事务），启用binlog日志记录，8.0.17版本之后（包括），且为innodb引擎事务。
+          *）主库 (客户端事务)，启用binlog日志记录，8.0.17版本之后（包括），且为innodb引擎事务。
+b，在停库时或者切换binlog文件时；
+   使用条件：
+          *）主库，8.0.17版本之前，启用binlog日志记录，任何引擎事务。
+          *）主库，任何版本，启用binlog日志记录，非innodb引擎事务。
+          *）从库，任何版本，启用binlog日志记录，非innodb引擎事务。
+
+当事务在停库或者切换binlog时更新mysql.gtid_executed表带来如下两个问题：
+a, 如果server意外停机，当前binlog包含的gtid没有写入mysql.gtid_executed表，那么在下一次启动恢复过程中，会读取当前binlog文件gtid记录并写入。如果在启动过程中禁用了binlog日志记录，这种情况下，mysql不能访问binlog文件，也就不能更新mysql.gtid_executed表，那么此表的记录不全，在启动复制线程时就会遇到错误。
+b, mysql.gtid_executed表并不能实时的反应当前执行的所有事务集合，但是全局变量@@global.gtid_executed包括了全部的执行的事务集合。
+
+5，既使处于read_only/super_read_only只读条件下，mysql.gtid_executed表仍然可写入。如果因为任何原因mysql.gtid_executed不能写入，但是因为：
+	a）任何非max_binlog_size的原因需要binlog日志切换，此时不会发生切换，仍然使用当前binlog文件，但是会产生警告；
+	b）如果因为max_binlog_size的原因，需要切换binlog，此时切换不了，server的行为取决于binlog_error_action设置的动作。
+
+

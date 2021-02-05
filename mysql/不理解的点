@@ -1,0 +1,5 @@
+1，不理解mysql.gtid_executed实际测试是包括所有
+https://dev.mysql.com/doc/refman/8.0/en/replication-gtids-concepts.html
+The MySQL system table mysql.gtid_executed is used to preserve the assigned GTIDs of all the transactions applied on a MySQL server, except those that are stored in a currently active binary log file.
+
+2，
