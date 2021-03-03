@@ -2728,7 +2728,7 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
             MTS_WORKER_UNDEF))) {
     /*
       (当前event_group/job_group即没有发现BEGIN/XID START，也没有发现GTID/匿名GTID。通常来说，这两个event是一个事务的开端，既然没发现，
-      说明这个event本身可能是:1,GTID/匿名GTID;2,BEGIN/XID START;3,其它位于g-event之前的。
+      说明这个event本身可能是:1,GTID/匿名GTID;2,BEGIN/XID START;3,其它位于g-event之前的event。
       )
     */
     if (!rli->curr_group_seen_gtid && !rli->curr_group_seen_begin) {
@@ -2736,7 +2736,7 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
       有可能此event是B-event、[匿名]GTID、GAP为空，或者GAP中最近放入的group已经过了结束点，新的group的前面几个event可能放在curr_da中了？
       gap将此group进行入队，进入新的group了。
       */
-      // 当前gap中分配的group++
+      // 当前gap中分配的group数量++
       rli->mts_groups_assigned++;
 
       rli->curr_group_isolated = false;
@@ -2758,8 +2758,9 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
         Slave_job_item job_item = {this, rli->get_event_relay_log_number(),
                                    rli->get_event_start_pos()};
         // B-event is appended to the Deferred Array associated with GCAP
+        // B-event放入curr_group_da中，
         rli->curr_group_da.push_back(job_item);
-
+        //并且B-event是当前事务中第一个放入的event。
         DBUG_ASSERT(rli->curr_group_da.size() == 1);
 
         if (starts_group()) {
@@ -2774,6 +2775,7 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
           rli->curr_group_seen_gtid = true;
 
           Gtid_log_event *gtid_log_ev = static_cast<Gtid_log_event *>(this);
+          //更新processing_trx信息
           rli->started_processing(gtid_log_ev);
         }
 
