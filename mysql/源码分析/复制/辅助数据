@@ -1,0 +1,21 @@
+常规的binlog结构
+DML：
+GTID        :SET @@SESSION.GTID_NEXT= 
+Query       :BEGIN
+Table_map   :
+Write_rows  :insert,update,delete
+Xid         :COMMIT
+
+
+DDL:
+GTID        :SET @@SESSION.GTID_NEXT
+Query,Xid   :sql 语句
+
+
+
+几种event类型
+B-event: 事务开始（例如，BEGIN,XID START）
+g-event: 包含分区信息的小型组（例如：table_map语句；Query_log_event，包括在RBR下以语句进行记录的事件，例如ddl事件）
+p-event: 在g-event之前的小型组（例如，set @@session.timestamp等设置变量语句）
+r-event: 在g之后的常规事件的小型组（例如，update，delete，insert）
+T-event: terminate事件（例如，XID, COMMIT, ROLLBACK, auto-commit query)
