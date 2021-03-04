@@ -19,3 +19,58 @@ g-event: 包含分区信息的小型组（例如：table_map语句；Query_log_e
 p-event: 在g-event之前的小型组（例如，set @@session.timestamp等设置变量语句）
 r-event: 在g之后的常规事件的小型组（例如，update，delete，insert）
 T-event: terminate事件（例如，XID, COMMIT, ROLLBACK, auto-commit query)
+
+
+User_var和Intvar event
+对于SBR模式，存在User_var和Intvar event。例如：
+原始事务：
+begin;
+set @t_v2=3;
+insert into t values(@t_v,'c12');
+flush logs;
+set @t_v2=4;
+insert into t values(@t_v,'c12');
+commit;
+
+对应binlog：
+GTID         :SET @@SESSION.GTID_NEXT= '924ae433-77e0-11eb-aa8e-fa163eb85e2b:154'
+Query       :BEGIN 
+Intvar        :SET INSERT_ID=3                                                     #对于自增列的设置
+User_var   :SET @`t_v`:=NULL                                                     #
+Query       :use `zabbix`/*!*/;
+                 :SET TIMESTAMP=1614835909/*!*/;
+                 :insert into t values(@t_v,'c12')
+Xid            :COMMIT
+Rotate      :SET @@SESSION.GTID_NEXT= 'AUTOMATIC'        #to binlog.000006  pos: 4
+Previous-GTIDs
+GTID         :SET @@SESSION.GTID_NEXT= '924ae433-77e0-11eb-aa8e-fa163eb85e2b:155'
+Query       :BEGIN
+Intvar        :SET INSERT_ID=4                                                     #对于自增列的设置
+User_var   :SET @`t_v`:=NULL    
+Query       :use `zabbix`/*!*/;
+                 :SET TIMESTAMP=1614835926/*!*/;
+                 :insert into t values(@t_v,'c12')  
+Xid            :COMMIT
+
+上面可以看到，一个事务中间切换binlog的话，会分成两个事务，分别记录。
+
+协调器调用栈：
+#log_event.cc
+int Log_event::apply_event(Relay_log_info *rli)
+#rpl_slave.cc
+apply_event_and_update_pos(Log_event **ptr_ev, THD *thd, Relay_log_info *rli)
+#rpl_slave.cc
+static int exec_relay_log_event(THD *thd, Relay_log_info *rli,
+                                Rpl_applier_reader *applier_reader,
+                                Log_event *in) 
+#rpl_slave.cc
+extern "C" void *handle_slave_sql(void *arg)
+
+
+
+
+slave_worker调用栈：
+#rpl_rli_pdb.cc
+int slave_worker_exec_job_group(Slave_worker *worker, Relay_log_info *rli)
+#repl_slave.cc
+static void *handle_slave_worker(void *arg) 

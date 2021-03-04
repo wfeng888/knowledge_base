@@ -2758,7 +2758,7 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
         Slave_job_item job_item = {this, rli->get_event_relay_log_number(),
                                    rli->get_event_start_pos()};
         // B-event is appended to the Deferred Array associated with GCAP
-        // B-event放入curr_group_da中，
+        // B-event或者GTID event放入curr_group_da中，
         rli->curr_group_da.push_back(job_item);
         //并且B-event是当前事务中第一个放入的event。
         DBUG_ASSERT(rli->curr_group_da.size() == 1);
@@ -2775,10 +2775,10 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
           rli->curr_group_seen_gtid = true;
 
           Gtid_log_event *gtid_log_ev = static_cast<Gtid_log_event *>(this);
-          //更新processing_trx信息
+          //更新gtid监控processing_trx信息
           rli->started_processing(gtid_log_ev);
         }
-
+       //这个函数也很重要，已添加注释
         if (schedule_next_event(this, rli)) {
           rli->abort_slave = true;
           if (is_gtid_event(this)) {
@@ -2794,22 +2794,30 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
        TODO: Make GITD event as B-event that is starts_group() to
        return true.
       */
+      /*
+       进入到这个分支的是B-event。
+           
+      */
       Slave_job_item job_item = {this, rli->get_event_relay_log_number(),
                                  rli->get_event_relay_log_pos()};
 
       // B-event is appended to the Deferred Array associated with GCAP
+      //事务的开始event（B-event）同样入队到curr_group_da，此时curr_group_da包括GTID 和B-event两个event
       rli->curr_group_da.push_back(job_item);
       rli->curr_group_seen_begin = true;
       rli->mts_end_group_sets_max_dbs = true;
+      //如果事务以GTID开始，那schedule_next_event就不会再次执行
       if (!rli->curr_group_seen_gtid && schedule_next_event(this, rli)) {
         rli->abort_slave = true;
         return nullptr;
       }
-
+      //注意看这里的2个断言，rli->curr_group_da.size() == 2，一个GTID event，一个B-event
+      //starts_group()，当前是B-event
       DBUG_ASSERT(rli->curr_group_da.size() == 2);
       DBUG_ASSERT(starts_group());
       return ret_worker;
     }
+   // 这是一个不可能的分支？毕竟上面的if-else都以return结尾的。
     if (schedule_next_event(this, rli)) {
       rli->abort_slave = true;
       return nullptr;
@@ -2819,18 +2827,27 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
   ptr_group = gaq->get_job_group(rli->gaq->assigned_group_index);
   if (!is_mts_db_partitioned(rli)) {
     /* Get least occupied worker */
+    /*
+      如果当前group已经有分配worker（通过gap->last_assigned_worker变量是否有值确定），那么还是使用这个worker；
+      如果当前group还没有分配worker，那么从workers中选一个空闲的；
+      如果所有worker都在忙，那就等待，直到获取一个空闲worker。
+      */
     ret_worker = rli->current_mts_submode->get_least_occupied_worker(
         rli, &rli->workers, this);
     if (ret_worker == nullptr) {
       /* get_least_occupied_worker may return NULL if the thread is killed */
       Slave_job_item job_item = {this, rli->get_event_relay_log_number(),
                                  rli->get_event_start_pos()};
+      // 如果当前事务在等待worker空闲的过程中，线程被kill了，
+      // 那么将job_item仍然放入curr_group_da缓存起来，等待下一个event到来再次进行分配。
       rli->curr_group_da.push_back(job_item);
 
       DBUG_ASSERT(thd->killed);
       return nullptr;
     }
+    //如果分配了worker，那么在这里将worker与group进行设置。
     ptr_group->worker_id = ret_worker->id;
+    //下面两个else都是处理数据库并行的，先不看了
   } else if (contains_partition_info(rli->mts_end_group_sets_max_dbs)) {
     int i = 0;
     Mts_db_names mts_dbs;
@@ -2983,7 +3000,7 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
       return ret_worker;
     }
   }
-
+  //注意这个断言，如果没分配上worker的话，在之前就已经return了
   DBUG_ASSERT(ret_worker);
   // T-event: Commit, Xid, a DDL query or dml query of B-less group.4
 
@@ -3018,7 +3035,10 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
     ptr_group->new_fd_event = rli->get_rli_description_event();
     ret_worker->fd_change_notified = true;
   }
-
+ //ends_group()，这里涉及到多个基类方法名重复，到时候debug看看。
+ /*
+ event代表事务结束   || 当前group没看到B-event 且此event是QUERY_EVENT(本身是B-event或者事务body) || 当前group没看到B-event 且没看到GTID
+*/
   if (ends_group() ||
       (!rli->curr_group_seen_begin &&
        (get_type_code() == binary_log::QUERY_EVENT ||
@@ -3173,7 +3193,7 @@ int Log_event::apply_event(Relay_log_info *rli) {
   THD *rli_thd = rli->info_thd;
 
   worker = rli;
-
+  //gap的恢复，先不看
   if (rli->is_mts_recovery()) {
     bool skip = bitmap_is_set(&rli->recovery_groups, rli->mts_recovery_index) &&
                 (get_mts_execution_mode(rli->mts_group_status ==
@@ -3199,12 +3219,19 @@ int Log_event::apply_event(Relay_log_info *rli) {
       return error;
     }
   }
-
+  /*
+   slave_parallel_workers < 1  || event的type决定了它不能通过worker并行执行
+   （例如，master上的rotate 事件，需要所有的worker finish各自的当前任务；slave上的rotate事件worker不能处理，
+     需要协调器自身在不影响worker处理当前任务的情况下，异步处理掉rotate 事件）
+  */
   if (!(parallel = rli->is_parallel_exec()) ||
       ((actual_exec_mode = get_mts_execution_mode(
             rli->mts_group_status == Relay_log_info::MTS_IN_GROUP)) !=
        EVENT_EXEC_PARALLEL)) {
+    //进入到这个分支，就是不能在worker间并行处理的event，不管是workers<1或者是不支持并行的event type。
     if (parallel) {
+       //这个分支处理 不支持并行的event type的事件
+       //例如，master rotate不能并行执行，或者slave rotate需要协调器处理的情况
       /*
          There are two classes of events that Coordinator executes
          itself. One e.g the master Rotate requires all Workers to finish up
@@ -3212,8 +3239,10 @@ int Log_event::apply_event(Relay_log_info *rli) {
          can't have this such synchronization because Worker might be waiting
          for terminal events to finish.
       */
-
+      
       if (actual_exec_mode != EVENT_EXEC_ASYNC) {
+        //这个分支处理需要同步执行的event。首先需要等待所有worker完成各自当前的任务
+        //需要等待所有worker结束后再处理。例如，master上一个事务中间进行了binlog切换，会切分成两个事务。
         /*
           this  event does not split the current group but is indeed
           a separator beetwen two master's binlog therefore requiring
@@ -3221,6 +3250,7 @@ int Log_event::apply_event(Relay_log_info *rli) {
         */
         if (rli->curr_group_da.size() > 0 && is_mts_db_partitioned(rli) &&
             get_type_code() != binary_log::INCIDENT_EVENT) {
+         //进入到这个分支就会进入错误处理
           char llbuff[22];
           /*
              Possible reason is a old version binlog sequential event
@@ -3243,6 +3273,8 @@ int Log_event::apply_event(Relay_log_info *rli) {
             rli->curr_group_da.size() > 0 &&
             rli->current_mts_submode->get_type() ==
                 MTS_PARALLEL_TYPE_LOGICAL_CLOCK) {
+          //[匿名]GTID event已入da，当前是INCIDENT_EVENT。
+         // GTID需要销毁，INCIDENT_EVENT需要等所有worker执行完毕后，由协调器执行
 #ifndef DBUG_OFF
           DBUG_ASSERT(rli->curr_group_da.size() == 1);
           Log_event *ev = rli->curr_group_da[0].data;
@@ -3256,6 +3288,10 @@ int Log_event::apply_event(Relay_log_info *rli) {
             the incident's GTID before waiting for workers to finish.
             So that it can exit from mts_checkpoint_routine.
           */
+         /*
+           将当前的delegated_jobs变量--，方便后面的wait_for_workers_to_finish调用正常完成。
+           同时，
+         */
           ((Mts_submode_logical_clock *)rli->current_mts_submode)
               ->withdraw_delegated_job();
         }
@@ -3285,11 +3321,14 @@ int Log_event::apply_event(Relay_log_info *rli) {
             coordinator. So the coordinator applies its GTID right before
             applying the incident event..
           */
+          //这个函数非常重要，在其中完成了curr_group_da中缓存的gtid event的apply，并且清空了curr_group_da。
+          //此外，还出队了协调器gap队列，并重置了curr_group_seen_gtid = false，rli->mts_groups_assigned--
           int error = apply_gtid_event(rli);
           if (error) return -1;
         }
 
 #ifndef DBUG_OFF
+        // 这个没有看懂
         /* all Workers are idle as done through wait_for_workers_to_finish */
         for (uint k = 0; k < rli->curr_group_da.size(); k++) {
           DBUG_ASSERT(!(rli->workers[k]->usage_partition));
@@ -3297,10 +3336,11 @@ int Log_event::apply_event(Relay_log_info *rli) {
         }
 #endif
       } else {
+        //处于这中类型的event并不属于任何transaction，由协调器在后面直接应用当前event即可。
         DBUG_ASSERT(actual_exec_mode == EVENT_EXEC_ASYNC);
       }
     }
-
+    //上面的分支做足了准备，这里由协调器来执行当前的event
     int error = do_apply_event(rli);
     if (rli->is_processing_trx()) {
       // needed to identify DDL's; uses the same logic as in get_slave_worker()
@@ -3318,6 +3358,7 @@ int Log_event::apply_event(Relay_log_info *rli) {
           DBUG_ASSERT(
               !debug_sync_set_action(current_thd, STRING_WITH_LEN(act)));
         };);
+       //当前组结束了，更新相关变量
         rli->finished_processing();
         rli->curr_group_seen_begin = false;
         DBUG_EXECUTE_IF("rpl_ps_tables", {
@@ -3330,6 +3371,7 @@ int Log_event::apply_event(Relay_log_info *rli) {
         };);
       }
     }
+   //非并行执行的所有情况在这里就结束了
     return error;
   }
 
@@ -3358,7 +3400,7 @@ int Log_event::apply_event(Relay_log_info *rli) {
 
   worker = nullptr;
   rli->mts_group_status = Relay_log_info::MTS_IN_GROUP;
-
+  //分配worker。如果当前job_group已经分配了worker，那还是那个；如果还没有分配，那选一个空闲的worker。
   worker =
       (Relay_log_info *)(rli->last_assigned_worker = get_slave_worker(rli));
 
@@ -3377,6 +3419,7 @@ err:
       The current one will be deleted as an event never destined/assigned
       to any Worker in Coordinator's regular execution path.
     */
+   //如果分配worker失败，删除所有curr_group_da中的event，当前event并没有进入curr_group_da，因此并没有删除
     for (uint k = 0; k < rli->curr_group_da.size(); k++) {
       Log_event *ev_buf = rli->curr_group_da[k].data;
       if (this != ev_buf) delete ev_buf;

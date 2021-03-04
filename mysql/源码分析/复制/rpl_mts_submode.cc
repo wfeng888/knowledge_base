@@ -578,6 +578,22 @@ bool Mts_submode_logical_clock::wait_for_last_committed_trx(
     When the candidate won't make it the counter is decremented at once
     while the mutex is hold.
   */
+/*
+get_lwm_timestamp（），获取当前gap中的lwr，等于当前gap中最新的连续committed 事务的sequence_number
+              the last time index containg lwm
+                  +------+
+                  | LWM  |
+                  |  |   |
+                  V  V   V
+   GAQ:   xoooooxxxxxXXXXX...X
+                ^   ^
+                |   | LWM+1
+                |
+                +- tne new current_lwm
+
+         <---- logical (commit) time ----
+*/
+//等待，直到需要的last_committed_arg在gap中已被discard。
   if ((!rli->info_thd->killed && !is_error) &&
       !clock_leq(last_committed_arg, get_lwm_timestamp(rli, true))) {
     PSI_stage_info old_stage;
@@ -690,7 +706,7 @@ int Mts_submode_logical_clock::schedule_next_event(Relay_log_info *rli,
     */
     static_assert(SEQ_UNINIT == 0, "");
     //当sequence_number > last_sequence_number+1,表示event之间发生了产生了间隙，
-    //这种情况可能发生在多源复制或者环形复制中
+    //什么情况下会发生？
     if (unlikely(sequence_number > last_sequence_number + 1)) {
       /*
         TODO: account autopositioning
@@ -746,7 +762,8 @@ int Mts_submode_logical_clock::schedule_next_event(Relay_log_info *rli,
     The coordinator waits till all transactions on which the current one
     depends on are applied.
   */
-  //不是binlog的第一个event，且不是mts初始化后的第一个event， 并且是GTID event ，且sequence_number没有间隙
+  //不是binlog的第一个event，且不是mts初始化后的第一个event， 并且是GTID event ，且sequence_number没有间隙。
+  //总之肯定是个GTID event
   if (!is_new_group) {
     longlong lwm_estimate = estimate_lwm_timestamp();//已经计算好的lwm进行load()。内存栅栏。
     // 当前event的last_committed大于当前gap的check_point低水线并且当前gap要出队的不是当前的group
@@ -762,6 +779,8 @@ int Mts_submode_logical_clock::schedule_next_event(Relay_log_info *rli,
         At awakening set min_waited_timestamp to commit_parent in the
         subsequent GAQ index (could be NIL).
       */
+      //如果当前event的last_committed（也即parent transaction）没有处于gap中的连续commited的lwm，
+     //说明还有之前事务的sequence_number=当前事务的last_committed的事务尚未提交，父事务未提交，子事务不能与之并行执行。需要等待。
       if (wait_for_last_committed_trx(rli, last_committed)) {
         /*
           MTS was waiting for a dependent transaction to finish but either it
@@ -777,10 +796,11 @@ int Mts_submode_logical_clock::schedule_next_event(Relay_log_info *rli,
         Making the slave's max last committed (lwm) to satisfy this
         transaction's scheduling condition.
       */
+      //这里有没看明白
       if (gap_successor) last_lwm_timestamp = sequence_number - 1;
       DBUG_ASSERT(!clock_leq(sequence_number, estimate_lwm_timestamp()));
     }
-
+   //分配事务数++
     delegated_jobs++;
 
     DBUG_ASSERT(!force_new_group);
@@ -802,7 +822,7 @@ int Mts_submode_logical_clock::schedule_next_event(Relay_log_info *rli,
         The malformed group is handled exceptionally each event is executed
         as a solitary group yet by the same (zero id) worker.
     */
-    //要等待所有已分配worker的group执行完毕，注意，当前event对应的group还没有分配worker执行
+    //通过delegated_jobs == jobs_done，要等待所有已分配worker的group执行完毕，注意，当前event对应的group还没有分配worker执行
     if (-1 == wait_for_workers_to_finish(rli)) return ER_MTS_INCONSISTENT_DATA;
 
     rli->mts_group_status = Relay_log_info::MTS_IN_GROUP;  // wait set it to NOT
@@ -823,8 +843,9 @@ int Mts_submode_logical_clock::schedule_next_event(Relay_log_info *rli,
       It's supported to be executed in one-by-one fashion.
       Todo: remove with the event group parser worklog.
     */
-    //上面default的情况。这里给当前group分配一个slave_worker，都是空的，因此取第一个。
+    //上面default的情况。此时gap中只有它一个group了，这里给当前group分配一个slave_worker，都是空的，因此取第一个。
     if (sequence_number == SEQ_UNINIT && last_committed == SEQ_UNINIT)
+    // 除此之外，还有另外一个地方对last_assigned_worker进行了分配
       rli->last_assigned_worker = *rli->workers.begin();
   }
 
