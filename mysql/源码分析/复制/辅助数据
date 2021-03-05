@@ -74,3 +74,24 @@ slave_worker调用栈：
 int slave_worker_exec_job_group(Slave_worker *worker, Relay_log_info *rli)
 #repl_slave.cc
 static void *handle_slave_worker(void *arg) 
+#repl_slave.cc
+start_slave_worker
+
+
+
+#rpl_info_factory.cc
+Relay_log_info *Rpl_info_factory::create_rli(uint rli_option,
+                                             bool is_slave_recovery,
+                                             const char *channel,
+                                             bool to_decide_repo)
+
+
+#rpl_info_table.cc
+
+
+
+
+#rpl_info_factory.cc
+bool Rpl_info_factory::create_slave_info_objects(
+#rpl_slave.cc
+int init_slave()
