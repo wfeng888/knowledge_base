@@ -3009,6 +3009,9 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
     event got scheduled so when Worker error-stopped at the first
     event it would be aware of where exactly in the event stream.
   */
+  //worker如果没有通知（设置）master_log_name 则在这里设置一下，并且修改标记变量为已通知
+  //注意两个标记变量ret_worker->master_log_change_notified、ptr_group->notified
+  //后续的xxxx_notified都是一个套路
   if (!ret_worker->master_log_change_notified) {
     if (!ptr_group)
       ptr_group = gaq->get_job_group(rli->gaq->assigned_group_index);
@@ -3119,9 +3122,11 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
       ret_worker->bitmap_shifted = 0;
       ret_worker->checkpoint_notified = true;
     }
+    //rli_checkpoint_seqno，最后一个检查点之后，执行的job_group的数量。用来进行强制释放gap队列元素
     ptr_group->checkpoint_seqno = rli->rli_checkpoint_seqno;
     ptr_group->ts = common_header->when.tv_sec +
                     (time_t)exec_time;  // Seconds_behind_master related
+
     rli->rli_checkpoint_seqno++;
     /*
       Coordinator should not use the main memroot however its not

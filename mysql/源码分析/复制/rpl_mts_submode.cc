@@ -730,6 +730,7 @@ int Mts_submode_logical_clock::schedule_next_event(Relay_log_info *rli,
        /* Require a fresh group to be started; */
        // todo: turn `force_new_group' into sequence_number == SEQ_UNINIT
        // condition
+       //force_new_group在int Rotate_log_event::do_update_pos(Relay_log_info *rli)方法中被设置为true
        force_new_group ||
        /* Rewritten event without commit point timestamp (todo: find use case)
         */
@@ -830,7 +831,7 @@ int Mts_submode_logical_clock::schedule_next_event(Relay_log_info *rli,
     /*
       the instant last lwm timestamp must reset when force flag is up.
     */
-    //重置为0
+    //当重新开始一个新的并行事务组，低水线job_group的sn重置为0
     rli->gaq->lwm.sequence_number = last_lwm_timestamp = SEQ_UNINIT;
     //当前gap中仅剩本次处理的group一个了
     delegated_jobs = 1;

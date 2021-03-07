@@ -13,6 +13,10 @@ Query,Xid   :sql 语句
 
 
 
+(Gtid)? Query(BEGIN) ... (Query(COMMIT) | Query(ROLLBACK) | Xid)
+(Gtid)? (Rand | User_var | Int_var)* Query(DDL)
+
+
 几种event类型
 B-event: 事务开始（例如，BEGIN,XID START）
 g-event: 包含分区信息的小型组（例如：table_map语句；Query_log_event，包括在RBR下以语句进行记录的事件，例如ddl事件）
@@ -95,3 +99,39 @@ Relay_log_info *Rpl_info_factory::create_rli(uint rli_option,
 bool Rpl_info_factory::create_slave_info_objects(
 #rpl_slave.cc
 int init_slave()
+
+
+
+
+
+
+判断一个event是否处于一个group中。
+#rpl_rli.h
+    A group is defined as the entire range of events that constitute
+    a transaction or auto-committed statement. It has one of the
+    following forms:
+
+    (Gtid)? Query(BEGIN) ... (Query(COMMIT) | Query(ROLLBACK) | Xid)
+    (Gtid)? (Rand | User_var | Int_var)* Query(DDL)
+
+    Thus, to check if the execute thread is in a group, there are
+    two cases:
+
+    - If the master generates Gtid events (5.7.5 or later, or 5.6 or
+      later with GTID_MODE=ON), then is_in_group is the same as
+      info_thd->owned_gtid.sidno != 0, since owned_gtid.sidno is set
+      to non-zero by the Gtid_log_event and cleared to zero at commit
+      or rollback.
+
+    - If the master does not generate Gtid events (i.e., master is
+      pre-5.6, or pre-5.7.5 with GTID_MODE=OFF), then is_in_group is
+      the same as is_in_trx_or_stmt().
+
+    @retval true Replication thread is inside a group.
+    @retval false Replication thread is not inside a group.
+  */
+  bool is_in_group() const {
+    bool ret = is_in_trx_or_stmt() || info_thd->owned_gtid.sidno != 0;
+    DBUG_PRINT("info", ("is_in_group()=%d", ret));
+    return ret;
+  }
