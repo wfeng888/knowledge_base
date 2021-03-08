@@ -768,7 +768,7 @@ int Mts_submode_logical_clock::schedule_next_event(Relay_log_info *rli,
   if (!is_new_group) {
     longlong lwm_estimate = estimate_lwm_timestamp();//已经计算好的lwm进行load()。内存栅栏。
     // 当前event的last_committed大于当前gap的check_point低水线并且当前gap要出队的不是当前的group
-    // 正如下面注释说的，这是不可能的分支，gap中怎么会同时包含不能并行执行的事务？
+    // 正如下面注释说的，这是不可能的分支，gaq中怎么会同时包含不能并行执行的事务？
     if (!clock_leq(last_committed, lwm_estimate) &&
         rli->gaq->assigned_group_index != rli->gaq->entry) {
       /*
