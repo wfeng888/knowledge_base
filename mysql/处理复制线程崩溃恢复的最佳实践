@@ -40,3 +40,39 @@ SELECT db, processlist_state, processlist_info FROM performance_schema.threads
 2，当表复制到salve上时，因为default_storage_engine不会随binlog复制到slave上，可以在salve上设置成自己想要的engine。
 另外，如果master上建表时指定了engine选项，那么可以在salve上通过disabled_storage_engines或者skip-xxx选项禁用特定的存储引擎，同时搭配default_storage_engine选项，以及sql_mode不要指定NO_ENGINE_SUBSTITUTION 选项达到目的。
 3，个别表可以通过重建表的方式修改存储引擎。
+
+
+
+
+
+
+
+
+复制异步连接故障切换：
+8.0.20版本引入的新功能，用于在从库上给单个通道创建一个 master池，从库可以根据master池中不同master的weight权重选择最高的master进行连接。
+要求：
+1，使用GTID，并且master_auto_position=1；#因为当发生fail over时需要在不同的master之间切换。需要利用GTID的自动跳过事务以及自动获取没有的事务的特性。
+2，SOURCE_CONNECTION_AUTO_FAILOVER=1；
+3，从库可以使用一套用户密码连接到所有的master实例，用户密码必须在change master to时指定；  
+	#通过:
+		asynchronous_connection_failover_add_source(channel, host, port, network_namespace, weight)
+		asynchronous_connection_failover_delete_source(channel, host, port, network_namespace)
+		asynchronous_connection_failover_add_managed(channel, managed_type, managed_name, host, port, network_namespace, primary_weight, secondary_weight)
+		asynchronous_connection_failover_delete_managed(channel, managed_name)
+	4个函数，都没有配置用户密码的地方，用户密码是从change master中设置的参数进行获取。因此，change master to时必须指定用户密码。而不能留在start slave时启动。
+4，复制连接用户需要有权限查询performance_schema的权限，因为需要根据其中的replication_asynchronous_connection_failover 、 replication_asynchronous_connection_failover_managed  视图，获取当前配置的master池的实例与对应实例的配置信息。
+
+特性：
+1，如果当前连接的master断开，或者出现了新的weight高于当前master的实列，则从库自动切换到新的master上进行复制。
+2，可以添加一个组复制组中的一个server，之后mysql自动添加组中的其它server。并且可以为组中的primary和secondary角色分别指定不同weight。
+
+注意：
+1，需要修改change master to 中的MASTER_CONNECT_RETRY(连接重试的间隔，单位s) MASTER_RETRY_COUNT(连接重试的次数)参数。因为这两个参数的默认值可以让从库一致重试连接60天。达不到故障切换的目的了。
+2，mysql通过thread/sql/replica_monitor线程，不断追踪组复制组中的成员关系的改变（加入，退出，角色切换等）。
+3，两种视图：
+mysql|performance_schema.replication_asynchronous_connection_failover：配置的所有的master。包括通过单个添加，或者添加的组复制中组的成员。
+mysql|performance_schema.replication_asynchronous_connection_failover_managed：配置的组复制组信息。
+
+
+
+
