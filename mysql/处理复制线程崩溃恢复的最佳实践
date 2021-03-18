@@ -1,0 +1,42 @@
+处理复制线程崩溃恢复的最佳实践：
+配置项：
+1，如果使用GTID复制，则启用SOURCE_AUTO_POSITION=1；
+2，如果使用基于文件位置复制，推荐sync_relay_log=1（注意，这个表示对于io_thread读取的每一个event，而不是transction，都执行一次sync磁盘的操作。这几乎是不可接受的）。这是因为，sql_thread已经应用了对应的event，但是io_thread可能并没有将对应的event 内容sync到磁盘上，那么此时发生崩溃的话，在重启后的复制恢复过程中，恢复线程会基于已经sync到磁盘的relay位置确定恢复开始位置，那么对于没有sync到磁盘的event就会重复恢复。造成恢复失败。对于这个原因，个人觉得可以通过设置relay_log_recovery = ON，在恢复开始时删除存在的relay_log文件，此时，io_thread会根据relay repository中记录的应用信息重新从maser拉取日志。自然就避免了以relay_log实际位置开始复制导致的问题。
+	the event of an unexpected halt of a replica there might be committed transactions that have not been synchronized to disk. Such transactions can cause the recovery process to fail if the recovering replica, based on the information it has in the relay log as last synchronized to disk, tries to retrieve and apply the transactions again instead of skipping them. 
+
+	另一方面，对于MTS，如果崩溃发生时，存在gap的话，在恢复过程中，如果恢复线程不能利用relay_log文件的内容，填平这些gap，也会发生错误。
+	如果relay log文件缺失内容，relay_log_recovery = ON 是否能解决这个原因导致的问题，需要看代码才能知道。 根据文档的描述， relay log recover过程在创建了新relay log并且将sql_thread、io_thread指向新位置后，采用与START REPLICA | SLAVE UNTIL SQL_AFTER_MTS_GAPS 一样的方式处理gap（UNTIL SQL_AFTER_MTS_GAPS不启动io_thread）， 在gap填平后才会从master拉取新日志到新创建的relay log文件中。 这个时候还没有开始从master拉取日志。 那么，如果旧的relay log本身有缺失， 那肯定是恢复不了的。所以还是要等待看代码才能理清其中的逻辑。
+
+	这些问题只会发生在基于文件位置的恢复方式中。对于GTID的方式，由于对应的GTID已经apply过，所以会直接跳过，不会造成重复应用。对于gap情况下同时发生的relay log内容缺失，再次连接的过程中会自动获取缺失的日志。
+3，innodb_flush_log_at_trx_commit=1。这个没什么说的，任何非紧急情况，都应该如此设置。
+4，relay_log_info_repository = TABLE
+5，relay_log_recovery = ON。这个变量的生效方式为，在server启动过程中，创建新的relay_log，并且将sql_thread的relay position指向新创建的relay log文件，接着，再将io_thread指向sql_thread的位置。老的relay log文件会自动删除掉。 对于GTID中SOURCE_AUTO_POSITION=1情况应该没什么作用， 这种情况会自动获取不存在的事务，并跳过已经apply的事务。
+
+
+
+
+
+监控RBR复制：
+1，打开监控项探针：
+UPDATE performance_schema.setup_instruments SET ENABLED = 'YES'
+ WHERE NAME LIKE 'stage/sql/Applying batch of row changes%';
+
+2，查看监控信息：
+SELECT WORK_COMPLETED, WORK_ESTIMATED FROM performance_schema.events_stages_current
+ WHERE EVENT_NAME LIKE 'stage/sql/Applying batch of row changes%'；
+
+3，如果binlog_rows_query_log_events选项启用的话，原始的sql语句会记录在binlog中，显示在performance_schema.threads的processlist_info列上。
+SELECT db, processlist_state, processlist_info FROM performance_schema.threads
+ WHERE processlist_state LIKE 'stage/sql/Applying batch of row changes%' AND thread_id = N;
+
+
+
+
+
+
+
+对master和slave使用不同的引擎：
+1，master上建表时，不指定engine选项，通过default_storage_engine选项指定。
+2，当表复制到salve上时，因为default_storage_engine不会随binlog复制到slave上，可以在salve上设置成自己想要的engine。
+另外，如果master上建表时指定了engine选项，那么可以在salve上通过disabled_storage_engines或者skip-xxx选项禁用特定的存储引擎，同时搭配default_storage_engine选项，以及sql_mode不要指定NO_ENGINE_SUBSTITUTION 选项达到目的。
+3，个别表可以通过重建表的方式修改存储引擎。
