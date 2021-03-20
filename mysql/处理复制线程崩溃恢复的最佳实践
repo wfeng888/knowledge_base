@@ -147,3 +147,21 @@ slave端： set global rpl_semi_sync_slave_enabled=1;
 stop slave io_thread;
 start slave_io_thread;
 4，将变量固化到my.cnf中
+
+
+
+
+
+
+
+
+延时复制（mysql8.0）：
+最重要的两个值original_commit_timestamp、immediate_commit_timestamp。 单位miscosecond，microsecond since of epoch。8.0中，这两个值仅在gtid/anonymous gtid event上有体现。
+original_commit_timestamp:在产生事务的server上，事务的 提交|写入到binlog 时间戳;对于唯一的一个事务，即使级联复制，original_commit_timestamp在所有server上的值都是一样的。也就是说，一个事务一旦产生original_commit_timestamp，则保持不变。
+immediate_commit_timestamp:事务在slave上进行apply的 提交|写入到binlog 的时间戳;对于每一个apply事务的server， immediate_commit_timestamp都会 更新为事务在此server上提交的时间戳。
+
+综上，在产生事务的server上，original_commit_timestamp == immediate_commit_timestamp。
+
+original_commit_timestamp，在组复制中，是事务 ready to commit的时间，也就是在server上完成执行， 并将writeset发送到组中成员进行 certification 的时间，这个事务是产生事务的server产生的，并在所有的组成员上进行apply，因此，在所有的组成员的binlog中，其original_commit_timestamp是相同的，但是immediate_commit_timestamp可能是不同的（取决于组成员应用这个事务并提交的时刻）。
+
+但是对于组复制中的 view change event（组关系发生改变），这种事务event是由组成员共同产生的，而不是由一个组成员产生，再复制到其它 组成员。 因此，这种事务并没有明确的产生server（并不是由任何一个server单独产生），所以original_commit_timestamp = 0 ；
