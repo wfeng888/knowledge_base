@@ -75,4 +75,75 @@ mysql|performance_schema.replication_asynchronous_connection_failover_managed：
 
 
 
+改善复制性能的方法：
+1，改进复制拓扑；
+2，将relay_log，binlog分置于不同物理磁盘
+3，调整rpl_read_size参数，如果对于relay log或者binlog的文件读成为瓶颈。这个参数控制从relay log或者binlog读取的最小数据量（在内存中开辟一块区域作为缓存，具体实现可能时mysql中常见的IO_CACHE结构。可能一次io读满整个IO_CACHE结构，增大这个变量值，有利于一次读取更多数据（磁盘上数据的连续分布，连续读。将小IO转为大IO），从而减少io次数，进而降低io负载）。不利因素为增大了IO_CACHE的内存分配。因为对于每一个读取binlog/relay log 的线程都会分配一个 IO_CACHE 缓存结构（master上，一个副本对应一个dump binlog的线程；slave上，每个channel的协调器线程都分配一个缓存。 因此，对于binlog文件， 更好的刷新方式应该是fsync，而不是O_DIRECT，有利于在多个副本dump线程上共享文件系统缓存）。
 
+
+
+
+
+半同步复制
+
+半同步复制（replication-semisync）若干问题的思考：
+1，按照文旦描述此过程有几个阶段，s1:事务在master上发起commit，(补充s1-1，事务在master上innodb prepare完成，并写入binlog)，s2:此时此事务对应的event被传递到slave上，s3:在slave接受到事务的全部event（transaction的最后一个event为commit或者rollback）并flush到磁盘上后返回ack给master，s4:此时master将此事务XA提交并返回响应给客户端。
+a，在s1后，s2前，event有没有写入master的binlog？有的，master将缓存中的event发送给slave，同时也写入binlog。两者并不冲突。无论是否收到slave的ack，event总是要写入binlog的。要回答这个问题，还要看下面这个问题。
+b，如果在s3后，s4前，master崩溃了，假设在此期间slave没有接受任何外部更新，在master恢复后，master和slave是否内容一致？
+	众所周知，MySQL的commit是两段提交，先innodb prepare，然后写入到binlog，最后在innodb中XA COMMIT标记事务提交完成。在崩溃恢复时，先利用redo日志将innodb恢复到崩溃前的状态。之后，如果innodb提交了，binlog没写入，那就回滚innodb（因为不知道binlog中的事务是否已发送到了slave上，需要确保主从一致）；如果innodb prepare，binlog写入，那就标记提交完成。如果binlog有，innodb没有提交（当innodb_flush_log_at_trx_commit <> 1时，可能会发生redo文件丢数据的情况，在innodb恢复过程中，自然就缺了这部分数据），没有任何处理。
+	综上，如果要保证master和slave一致，那么event在发送给slave之前，一定会先写入binlog。
+c，综上，s1阶段，应该已经完成了innodb prepare，binlog写入。在s4阶段，是完成了innodb XA提交。
+2，半同步复制拓扑中的master1如果发生崩溃并且导致了failover，此时，如果master1恢复后为啥不能作为重新作为master？
+因为半同步复制的master1在崩溃发生，可能有些事务并没有来的及发送到slave。考虑上面s1之后，s2之前发生的崩溃。如果slave在failover之后成了master2，那master2相比master1是缺少事务的。
+
+变量：
+ rpl_semi_sync_master_wait_for_slave_count：设置master对于每个事务，至少需要等待多少个slave的ack
+ rpl_semi_sync_master_wait_point：设置master在哪个阶段将等待获取slave的ack（发送event到slave的时机是一样的，都是写入binlog之后）。有两个取值：
+ 	AFTER_SYNC：master将事务写入binlog和slave，在sync binlog后，停下来等待获取slave的ack，在收到ack之后，进行innodb XA COMMIT， 并返回给客户端；
+ 	AFTER_COMMIT：master将事务写入binlog和slave，接着sync binlog以及innodb XA COMMIT完成后，停下来等待获取slave的ack， 在收到ack之后， 返回响应给客户端。
+ 设置为AFTER_SYNC，则所有客户端都在同一时间看到事务的提交结果。设置为AFTER_COMMIT，则提交事务的客户端因为没有收到响应，仍然处于等待状态，其它客户端能看到此事务的提交结果（因为已经走完了整个提交流程）。两个配置的区别在于，不同客户端看到提交结果的时间差；更重要的一点，http://mysql.taobao.org/monthly/2015/06/01/的末尾提到的解决半同步复制主从不一致的问题，所利用的原理在于，如果master在等待slave的ack的过程中崩溃，在之后的崩溃恢复过程中，AFTER_COMMIT会导致innodb中尚未XA COMMIT，因此可以利用将binlog日志进行截断，促成mysql将已prepare的事务（但是未传递到slave的binlog event对应的innodb事务，会发生不一致的地方也就是这些事务）回滚掉，从而确保主从一致。
+ 其中最重要的有两点，一是，主从不一致的事务在master恢复后被回滚掉了；二是主从不一致的事务，尚没有被任何客户端幻读从而进入错误的逻辑中。
+关于半同步复制，http://mysql.taobao.org/monthly/2015/06/01/的最后给了可能问题的解决方法。
+
+
+rpl_semi_sync_master_enabled:控制master端是否启用半同步复制
+rpl_semi_sync_master_timeout:控制master等待获取ack的超时时间。单位ms，默认10000（10s）
+rpl_semi_sync_slave_enabled:控制slave端是否启用半同步复制
+replication_sender_observe_commit_only:是否限制回调，启用可以改善性能。默认禁用
+replication_optimize_for_static_plugin_config:使用共享锁，同时减少锁获取，启用以改善性能。启用后不能卸载半同步复制插件。默认禁用
+rpl_semi_sync_master_wait_no_slave:控制是否master在副本数量降低到少于rpl_semi_sync_master_wait_for_slave_count的数量时，仍然等待rpl_semi_sync_master_timeout超时过期。如果启用的话，仍然等待。如果禁用，则在等待超时期间的任意时刻，只要副本数量降低到少于rpl_semi_sync_master_wait_for_slave_count，则立即返回正常的异步复制。
+
+rpl_semi_sync_slave_trace_level:slave端的半同步复制追踪级别
+rpl_semi_sync_master_trace_level:master端的半同步复制追踪级别。
+
+
+状态变量：
+Rpl_semi_sync_master_clients: 半同步复制的副本的数量
+Rpl_semi_sync_master_net_waits: master等待副本ack的总次数
+Rpl_semi_sync_master_no_times: master关闭半同步复制的总次数，应该是从半同步复制切换到异步复制的切换次数。
+Rpl_semi_sync_master_status: 当前server作为master角色，是否处于半同步复制状态。on表示当前处于半同步复制中（半同步复制插件启用，并且接受了slave的ack），off表示未处于半同步复制中（半同步复制插件没启用，或者master接收slave ack超时）。
+Rpl_semi_sync_master_no_tx: 没有被slave成功确认的提交的数量。
+Rpl_semi_sync_master_yes_tx: 成功被slave 确认的提交的数量。
+Rpl_semi_sync_slave_status: 当前server作为slave角色，是否处于半同步复制状态。on表示半同步复制插件启用并且io_thread运行中。否则为off。
+Rpl_semi_sync_master_timefunc_failures: master调用时间函数失败的次数
+Rpl_semi_sync_master_tx_avg_wait_time: master等待每一个事务被确认的平均时间(ms)
+Rpl_semi_sync_master_tx_wait_time: master等待所有事务被确认的总时间(ms)
+Rpl_semi_sync_master_tx_waits: master等待事务的总次数。  Rpl_semi_sync_master_tx_wait_time 约等于 Rpl_semi_sync_master_tx_waits * Rpl_semi_sync_master_tx_avg_wait_time
+Rpl_semi_sync_master_wait_pos_backtraverse: The total number of times the source waited for an event with binary coordinates lower than events waited for previously. This can occur when the order in which transactions start waiting for a reply is different from the order in which their binary log events are written.
+Rpl_semi_sync_master_wait_sessions: 当前等待slave响应ack的session的数量
+Rpl_semi_sync_master_yes_tx: 被slave成功ack的提交的数量
+
+
+半同步复制插件需要手动安装，默认未安装。
+
+设置半同步复制：
+1，安装插件
+master安装：install plugin rpl_semi_sync_master soname 'semisync_master.so'
+slave安装： install plugin rpl_semi_sync_slave  soname 'semisync_slave.so'
+2，设置变量，启用semisync：
+master端：set global rpl_semi_sync_master_enabled=1;
+slave端： set global rpl_semi_sync_slave_enabled=1;
+3，重启io_thread，以使从库将自身注册为semisync副本，如果io线程不重新启动的话，仍然会以异步复制方式进行复制
+stop slave io_thread;
+start slave_io_thread;
+4，将变量固化到my.cnf中
