@@ -1,0 +1,24 @@
+binlog和routine
+binlog_format的影响：
+
+
+routine创建
+权限：
+a, 创建routine需要CREATE ROUTINE, ALTER ROUTINE权限，如果在创建时指定了definer选项并且没有指向自己(例如definer=wf@'%' ), 那么就需要SET_USER_ID或者SUPER权限, 同时还需要SYSTEM_USER权限。；
+b, 安全考虑：
+因为slave sql_thread 拥有所有的权限(删除个数据库不在话下)。 因此为了避免在routine中植入只在slave上执行的危险操作,在创建routine时, 需要采取下面三种操作：
+	b1, 如果log_bin_trust_routine_creators禁用(=0)，则要求routine的创建者拥有super权限(目的是限制普通用户创建具有灾难影响的对象) + 函数必须指定DETERMINISTIC, NO SQL, 或者 READS SQL DATA 修饰，无论binlog_format设置任何值；
+	b2, 如果log_bin_trust_routine_creators启用(=1), 则创建者不必拥有super权限(都信任了，还较个啥劲)；
+	b3, 对于多应用用户，总不能给应用连接用户super权限(太危险了),但是应用确实需要创建routine,同时dba又不太信任开发人员，那么在slave上，可用通过在change master上启用权限检查,限制sql_thread的权限,堵住危险操作的风险(在master上可以限制应用用户获取drop database等危险权限 ). 这样即避免了应用用户获取super权限, 开发人员也可以创建routine, 同时又限制了在master|slave上执行危险操作(归根结底，是routine的执行语句写入了binlog，而routine又包含了仅在slave上执行的危险操作).
+
+
+
+
+routine与binlog：
+对于function
+当binlog_format=row|mixed时，function执行以具体修改的行写入binlog；
+当binlog_format=statement时，function执行写入执行语句到binlog；
+
+
+
+

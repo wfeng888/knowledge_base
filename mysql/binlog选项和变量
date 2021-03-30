@@ -1,0 +1,195 @@
+24，binlog_transaction_dependency_tracking
+设置事务依赖的追踪信息，可选值为：
+COMMIT_ORDER：默认值。binlog组提交中每个提交组中的事务相互之间是没有依赖的(可以在slave上并行apply)。
+WRITESET：依赖信息来自于事务的写集合，只要事务的更新集没有冲突，则事务之间是没有依赖的。
+WRITESET_SESSION：在WRITESET的基础上，限定来自同一个session的事务虽然可以并行apply，但是提交顺序不能乱，还是要保持在master上的提交顺序。
+
+经过上面的三种依赖计算方法，最终生成的依赖信息呈现为事务的提交时间戳(last_committed 、 sequence_number)，每个事务自身的提交时间戳 sequence_number ， last_committed是当前事务依赖的父事务的sequence_number 值。 last_committed相同的事务可以并行apply，sequence_number较小的事务，在sequence_number较大的的事务之前提交。
+
+COMMIT_ORDER是最基础的依赖计算方法，在一个组提交内提交的事务之间肯定是不会有写集合冲突，WRITESET|WRITESET_SESSION在COMMIT_ORDER的基础上进一步的扩展，承认只要事务的写集合没有冲突，则就可以并行。因此，WRITESET|WRITESET_SESSION产生的并行度>=COMMIT_ORDER产生的并行度。但是在特定情况下，WRITESET|WRITESET_SESSION并不能改善COMMIT_ORDER的并行度，包括：
+	a）事务没有写集合或只有部分写集合，例如ddl语句；
+	b）事务更新的表没有主键或者唯一键，此时不能进行写集合的冲突检测；
+	c）事务更新的外键关系上的父表，可能会产生级联的修改(这个为什么不行？没有想明白)
+此时，既然已经明确不能提升并行度，则干脆点使用COMMIT_ORDER进行依赖信息计算。
+
+当使用binlog组提交时，master上需要启用binlog_order_commits，以确保redo中的事务提交顺序与binlog中的提交顺序一致。同时，当binlog_transaction_dependency_tracking=WRITESET|WRITESET_SESSION时，从库如果使用MTS，需要使用slave_preserve_commit_order=1最大可能确保从库保持与master状态一致。
+
+当binlog_transaction_dependency_tracking=WRITESET|WRITESET_SESSION时，需要设置参数transaction_write_set_extraction(这个参数控制writeset的hash计算算法，可选值为OFF|MURMUR32|XXHASH64。设置为OFF则不进行hash计算，这与binlog_transaction_dependency_tracking=WRITESET|WRITESET_SESSION是冲突的) =MURMUR32|XXHASH64。其中MURMUR32算法按照代码描述，易受攻击；XXHASH64算法，在64位系统上性能好于32位系统。
+
+当计算writeset时(update语句before image 、 after image分别计算hash并作为hashset中的一项进行保存，insert|delete语句只计算after image或者before image)，计算出来的结果需要保存起来，以方便与后续的事务的writeset进行比较，确保后续事务的writeset与当前存在事务的writeset不冲突，从而后续的事务可以与当前的事务进行并行apply，此时又涉及到了控制writeset大小的问题：binlog_transaction_dependency_history_size，用于设置writeset中保存的row的数量，取值范围1~1000000，默认值25000(有几个问题需要看代码后才能明确：a，这个参数是否同时控制事务集合的writeset大小以及当前计算hash的事务的writeset大小？b，如果事务集合的writeset超出了此大小会有什么影响？c，如果当前事务的的writeset超出了此大小有什么影响，与它同处于一个组提交中的事务，slave是否并行重放？)。
+
+组复制，当事务在冲突认证之后，从relay log中apply事务时，组复制使用自身的并行度，不依赖binlog_transaction_dependency_tracking的设置(这是文档中的描述。个人理解，从relay log中进行并行apply，依赖的是参数slave_parallel_type，跟binlog_transaction_dependency_tracking有什么关系？这个问题需要等学习完组复制再回过头来看看)。binlog_transaction_dependency_tracking控制binlog写入的事务的(last_committed)值，这些binlog在新组员加入的恢复过程中，用于分布式恢复(从donor拉取binlog，并在新组员上进行apply，以追平事务)。因此设置binlog_transaction_dependency_tracking=WRITESET|WRITESET_SESSION有助于加快这个恢复过程。
+
+
+
+25, binlog_transaction_dependency_history_size
+设置writeset中保存的行的数量。取值范围0~1000000，默认值25000。
+
+
+26，expire_logs_days
+参考binlog_expire_logs_seconds参数。
+
+
+27，log_bin_basename
+只读变量，由server根据log_bin变量的值进行设置。
+
+
+
+28，log_bin_index
+binlog.index文件，操作方式与log_bin一致。
+
+
+29，log_bin_trust_function_creators
+设置是否创建的routine是可信的，不会使用不安全的语句。可选值：
+0，默认值。要求用户具有  super权限+create|alter routine权限 + 声明( DETERMINISTIC|READS SQL DATA|NO SQL)。
+1，要求用户具有create|alter routine权限即可。
+这个值的作用不受binlog_format参数设置的影响。
+
+
+
+30，log_bin_use_v1_row_events
+在8.0.18版本被废弃。
+用于设置是否按照v1版本使用RBR记录binlog，以满足5.5及之前版本的slave。
+
+
+31，log_slave_updates
+控制slave是否将从master接收并且在slave上执行(因为过滤规则，有些事务可能没有写入relay log，自然也不会在slave上apply)的事务写入slave自身的binlog中。
+默认启用(需要binlog同时启用，否则没有效果)。启用后可以满足链式复制的要求。同时，slave会自动过滤server_id为自己的事务，因此不会导致无限复制。
+
+
+32，log_statements_unsafe_for_binlog
+如果遇到不安全的语句，是否将错误信息写入错误日志中。默认启用。
+If error 1592 is encountered, controls whether the generated warnings are added to the error log or not.
+
+
+33，master_verify_checksum
+设置master是否对从binlog中的读取的event检查checksum。默认禁用。master在崩溃恢复或者重启的时候会读取binlog。
+启用时，对读取的event检查checksum，如果checksum不匹配，则报错并停止；
+禁用时，master仅检查event的长度是否正确(event头中记录了此event的长度)，仅仅完整的event被读取。(遇到不完整的event，估计也是报错退出)
+
+
+
+34，max_binlog_cache_size
+设置单个事务中的事务性语句产生的 binlog cache 的最大字节大小. 取值范围4096~18446744073709547520(16EB), 默认值18446744073709547520, 推荐最大大小4GB.
+binlog cache的整个流程是这样的：事务开启后，
+	第一步， 事务性语句的变更产生的binlog内容(RBR为row event或者SBR为语句)，写入到内存中由参数 binlog_cache_size 指定大小的内存中，非事务性语句的变更产生的binlog内容(RBR为row event或者SBR为语句)写入到 binlog_stmt_cache_size 参数指定大小的内存中(在RBR或者MIXED中的RBR下，非事务性语句产生的binlog在语句执行结束后立即写入binlog，但是在写入binlog之前，构造的event仍然需要缓存在cache中。在SBR或者MIXED中的SBR，受参数binlog_direct_non_transactional_updates的影响，事务中的第一条sql之后的非事务性语句可能执行完毕后立即写入binlog或者缓存在cache中。语句执行完后，Binlog_stmt_cache_use增加；如果cache大小不够，用到了磁盘临时文件<猜测是mmap方式，因此仍然在内存中>，Binlog_stmt_cache_disk_use增加。);
+
+	第二步，如果产生的binlog内容超出了 binlog_cache_size|binlog_stmt_cache_size 参数设置的内存cache大小，那多出的部分，溢出到 tmpdir 变量指定的目录中新创建的临时文件中(文件猜测可能是以mmap的方式映射的，因此实际上仍然使用的是内存)；
+	
+	第三步，事务结束, 提交:事务性语句的binlog cache写出到binlog文件中;或者回滚: SBR，第一条sql之后的非事务性sql缓存的binlog(binlog_direct_non_transactional_updates=0) 写出到binlog文件，同时，如果事务包含非事务性语句，则事务性的binlog cache同样写出到binlog文件，否则(事务中没有非事务性sql)事务性的binlog cache不写出到binlog文件。 同时Binlog_cache_use状态变量+1，如果事务性binlog内容有使用到磁盘临时文件，则Binlog_cache_disk_use+1。
+
+具体的测试，来自https://stackoverflow.com/questions/37813819/mysql-max-binlog-cache-size-vs-binlog-cache-size：
+MariaDB [test]> select @@binlog_cache_size, @@max_binlog_cache_size, @@binlog_format;
++---------------------+-------------------------+-----------------+
+| @@binlog_cache_size | @@max_binlog_cache_size | @@binlog_format |
++---------------------+-------------------------+-----------------+
+|               32768 |                   65536 | ROW             |
++---------------------+-------------------------+-----------------+
+1 row in set (0.01 sec)
+
+MariaDB [test]> show create table t1 \G
+*************************** 1. row ***************************
+       Table: t1
+Create Table: CREATE TABLE `t1` (
+  `a` text
+) ENGINE=InnoDB DEFAULT CHARSET=latin1
+1 row in set (0.00 sec)
+1. Transaction size is below @@binlog_cache_size
+
+(transaction succeeds, uses the cache, does not use the disk)
+
+MariaDB [test]> flush status;
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [test]> begin;
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [test]> insert into t1 values (repeat('a',20000));
+Query OK, 1 row affected (0.01 sec)
+
+MariaDB [test]> insert into t1 values (repeat('a',10000));
+Query OK, 1 row affected (0.04 sec)
+
+MariaDB [test]> commit;
+Query OK, 0 rows affected (0.05 sec)
+
+MariaDB [test]> show status like 'Binlog_cache%';
++-----------------------+-------+
+| Variable_name         | Value |
++-----------------------+-------+
+| Binlog_cache_disk_use | 0     |
+| Binlog_cache_use      | 1     |
++-----------------------+-------+
+2 rows in set (0.01 sec)
+2. Transaction size is above @@binlog_cache_size, but below @@max_binlog_cache_size
+
+(transaction uses the cache, and the cache uses the disk)
+
+MariaDB [test]> flush status;
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [test]> begin;
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [test]> insert into t1 values (repeat('a',20000));
+Query OK, 1 row affected (0.10 sec)
+
+MariaDB [test]> insert into t1 values (repeat('a',20000));
+Query OK, 1 row affected (0.10 sec)
+
+MariaDB [test]> commit;
+Query OK, 0 rows affected (0.03 sec)
+
+MariaDB [test]> show status like 'Binlog_cache%';
++-----------------------+-------+
+| Variable_name         | Value |
++-----------------------+-------+
+| Binlog_cache_disk_use | 1     |
+| Binlog_cache_use      | 1     |
++-----------------------+-------+
+2 rows in set (0.01 sec)
+3. Transaction size exceeds @@max_binlog_cache_size
+
+(transaction fails)
+
+MariaDB [test]> flush status;
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [test]> begin;
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [test]> insert into t1 values (repeat('a',20000));
+Query OK, 1 row affected (0.12 sec)
+
+MariaDB [test]> insert into t1 values (repeat('a',20000));
+Query OK, 1 row affected (0.15 sec)
+
+MariaDB [test]> insert into t1 values (repeat('a',20000));
+Query OK, 1 row affected (0.12 sec)
+
+MariaDB [test]> insert into t1 values (repeat('a',20000));
+ERROR 1197 (HY000): Multi-statement transaction required more than 'max_binlog_cache_size' bytes of storage; increase this mysqld variable and try again
+
+
+
+
+需要注意的地方有：
+a, max_binlog_stmt_cache_size 仅针对SBR起作用，原文的描述 max_binlog_stmt_cache_size sets the size for the statement cache only. 并且个人的测试也证明了即使在单条插入到 myisam 表的语句中构造了超过60M的数据, 仍然没有报错超出 max_binlog_stmt_cache_size 大小的错误。
+b, 如下的状态变量，是累积值，仅表示发生的次数(事务数|语句数)。其中Binlog_cache_disk_use 、 Binlog_cache_use 在事务结束(COMMIT|ROLLBACK)累加1；Binlog_stmt_cache_disk_use 、 Binlog_stmt_cache_use 在语句执行完毕后累加1
+	Binlog_cache_disk_use
+	Binlog_cache_use
+	Binlog_stmt_cache_disk_use
+	Binlog_stmt_cache_use 
+
+
+
+35, max_binlog_size
+设置binlog文件的最大大小，如果max_relay_log_size参数未设置的话，也用来限定relay log文件大小。取值范围4096~1073741824. 默认值1073741824。
+如果写入binlog event导致binlog文件超出此大小，则会写入到新的binlog文件中( 这是个隐式的flush操作，会触发binlog 过期删除 )。 但是因为一个transaction不会分开写入到两个binlog，因此，如果单个事务比较大的话，会造成单个binlog文件大大超出设置的大小。
+当GTID启用 , 当binlog达到 max_binlog_size 大小，写入新文件时，如果mysql.gtid_executed表不能访问 此binlog文件, 则会视为binlog文件访问失败, 处理的方式取决于  binlog_error_action 参数的设置 ， 可能导致server宕机。
+
+
+36, max_binlog_stmt_cache_size
+设置非事务性语句(注意是语句，不是row event。意思是RBR下不起作用)的最大内存缓存大小。取值范围4096~4GB(32位)|18446744073709547520(64位), 默认值 18446744073709547520(64位)|4GB(32位) 。 因为仅对语句(SBR)生效, 所以想要达到这个大小应该说很难了。
+
+
