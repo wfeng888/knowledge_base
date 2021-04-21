@@ -102,3 +102,30 @@ Channel_state_observer
 	Asynchronous_channels_state_observer
 	Recovery_channel_state_observer
 
+
+
+
+
+(group_transaction_observation_manager::Group_transaction_observation_manager)->group_transaction_listeners{
+    (transaction_consistency_manager::Transaction_consistency_manager::Group_transaction_listener)
+    ,(::Server_ongoing_transactions_handler::Group_transaction_listener)}
+class Group_transaction_listener {
+ public:
+  /** Enum for transaction origins */
+  enum enum_transaction_origin {
+    GROUP_APPLIER_TRANSACTION = 0,   // Group applier transaction
+    GROUP_RECOVERY_TRANSACTION = 1,  // Distributed recovery transaction
+    GROUP_LOCAL_TRANSACTION = 2      // Local transaction
+  };
+  virtual int before_transaction_begin(my_thread_id thread_id,
+                                       ulong gr_consistency_level,
+                                       ulong hold_timeout,
+                                       enum_rpl_channel_type channel_type) = 0;
+  virtual int before_commit(my_thread_id thread_id,
+                            enum_transaction_origin origin) = 0;
+  virtual int before_rollback(my_thread_id thread_id,
+                              enum_transaction_origin origin) = 0;
+  virtual int after_commit(my_thread_id thread_id, rpl_sidno sidno,
+                           rpl_gno gno) = 0;
+  virtual int after_rollback(my_thread_id thread_id) = 0;
+}
