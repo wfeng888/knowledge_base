@@ -1,0 +1,145 @@
+
+int Transaction_consistency_manager::before_transaction_begin(
+    my_thread_id thread_id, ulong gr_consistency_level, ulong timeout,
+    enum_rpl_channel_type rpl_channel_type) {
+  DBUG_TRACE;
+  int error = 0;
+
+  if (GR_RECOVERY_CHANNEL == rpl_channel_type ||
+      GR_APPLIER_CHANNEL == rpl_channel_type) {
+    return 0;
+  }
+
+  const enum_group_replication_consistency_level consistency_level =
+      static_cast<enum_group_replication_consistency_level>(
+          gr_consistency_level);
+
+  // Transaction consistency can only be used on a ONLINE member.
+  if (consistency_level >= GROUP_REPLICATION_CONSISTENCY_BEFORE &&
+      local_member_info->get_recovery_status() !=
+          Group_member_info::MEMBER_ONLINE) {
+    return ER_GRP_TRX_CONSISTENCY_NOT_ALLOWED;
+  }
+
+  DBUG_PRINT("info", ("thread_id: %d; consistency_level: %d", thread_id,
+                      consistency_level));
+
+  if (GROUP_REPLICATION_CONSISTENCY_BEFORE == consistency_level ||
+      GROUP_REPLICATION_CONSISTENCY_BEFORE_AND_AFTER == consistency_level) {
+      //这个函数好理解，其中是阻塞，直到当前事务开始时的gtid_received最终变成某一个时刻的gtid_executed
+      //的子集，也就是全部applied后返回。
+    error = transaction_begin_sync_before_execution(thread_id,
+                                                    consistency_level, timeout);
+    if (error) {
+      /* purecov: begin inspected */
+      return error;
+      /* purecov: end */
+    }
+  }
+  //这个函数要费一番周折，关键点在Transaction_consistency_manager::after_commit方法中。看下面对此函数的解析
+  error = transaction_begin_sync_prepared_transactions(thread_id, timeout);
+  if (error) {
+    /* purecov: begin inspected */
+    return error;
+    /* purecov: end */
+  }
+
+  //单主模式，在切换主节点时，所有事务线程需要hold住。
+  if (m_primary_election_active) {
+    if (consistency_level ==
+            GROUP_REPLICATION_CONSISTENCY_BEFORE_ON_PRIMARY_FAILOVER ||
+        consistency_level == GROUP_REPLICATION_CONSISTENCY_AFTER) {
+      return m_hold_transactions.wait_until_primary_failover_complete(timeout);
+    }
+  }
+
+  return 0;
+}
+
+
+
+int Transaction_consistency_manager::
+    transaction_begin_sync_prepared_transactions(my_thread_id thread_id,
+                                                 ulong timeout) {
+  DBUG_TRACE;
+  Transaction_consistency_manager_key key(0, 0);
+
+  // Take a read lock to check queue size.
+  m_prepared_transactions_on_my_applier_lock->rdlock();
+  bool empty = m_prepared_transactions_on_my_applier.empty();
+  m_prepared_transactions_on_my_applier_lock->unlock();
+  if (empty) {
+    return 0;
+  }
+
+  m_prepared_transactions_on_my_applier_lock->wrlock();
+  if (m_prepared_transactions_on_my_applier.empty()) {
+    /* purecov: begin inspected */
+    m_prepared_transactions_on_my_applier_lock->unlock();
+    return 0;
+    /* purecov: end */
+  }
+
+  if (m_plugin_stopping) {
+    m_prepared_transactions_on_my_applier_lock->unlock();
+    return ER_GRP_TRX_CONSISTENCY_BEGIN_NOT_ALLOWED;
+  }
+
+  DBUG_PRINT("info", ("thread_id: %d", thread_id));
+
+  if (transactions_latch->registerTicket(thread_id)) {
+    /* purecov: begin inspected */
+    LogPluginErr(ERROR_LEVEL,
+                 ER_GRP_RPL_REGISTER_TRX_TO_WAIT_FOR_DEPENDENCIES_FAILED,
+                 thread_id);
+    m_prepared_transactions_on_my_applier_lock->unlock();
+    return ER_GRP_TRX_CONSISTENCY_AFTER_ON_TRX_BEGIN;
+    /* purecov: end */
+  }
+
+  // queue a transaction 0,0 to mark a begin
+  m_prepared_transactions_on_my_applier.push_back(key);
+  // queue this thread_id so that we can wake it up
+  m_new_transactions_waiting.push_back(thread_id);
+
+  m_prepared_transactions_on_my_applier_lock->unlock();
+
+  DBUG_PRINT("info", ("waiting for prepared transactions"));
+
+  /*前面的代码都好理解，这里的问题在于，上面registerTicket的cond，在哪里释放？
+  答案在于Transaction_consistency_manager::after_commit方法中。每一个事务，prepare时，放入m_prepared_transactions_on_my_applier队列中，当commit提交完成，则从m_prepared_transactions_on_my_applier队列中删除，同时删除了队列中头部的
+  (key.first,key.second） = {(0,0),(-1,-1)}的元素。实际意义是，将此提交事务在处于prepare阶段放入队列之后的开始的事务释放ticket。
+  */
+  if (transactions_latch->waitTicket(thread_id, timeout)) {
+    /* purecov: begin inspected */
+    remove_prepared_transaction(key);
+    LogPluginErr(ERROR_LEVEL, ER_GRP_RPL_WAIT_FOR_DEPENDENCIES_FAILED,
+                 thread_id);
+    return ER_GRP_TRX_CONSISTENCY_AFTER_ON_TRX_BEGIN;
+    /* purecov: end */
+  }
+
+  return 0;
+}
+
+
+
+
+int Transaction_consistency_manager::after_commit(my_thread_id, rpl_sidno sidno,
+                                                  rpl_gno gno) {
+  DBUG_TRACE;
+  DBUG_PRINT("info", ("gtid: %d:%llu", sidno, gno));
+  int error = 0;
+
+  // Only acquire a write lock if really needed.
+  m_prepared_transactions_on_my_applier_lock->rdlock();
+  bool empty = m_prepared_transactions_on_my_applier.empty();
+  m_prepared_transactions_on_my_applier_lock->unlock();
+  //这里释放了当group_replication_consistency={BEFORE,BEFORE_AND_AFTER}所有在此事务处于prepare状态时开启的事务。
+  if (!empty) {
+    Transaction_consistency_manager_key key(sidno, gno);
+    error = remove_prepared_transaction(key);
+  }
+
+  return error;
+}
