@@ -1,0 +1,142 @@
+online ddl
+说一下个人对Instant、In Place、	Rebuilds Table、Permits Concurrent DML、Only Modifies Metadata的理解：
+Instant: 仅仅修改数据字典中的元数据
+In Place: 字面意思是"在合适的地方", 这里的合适， 既有可能是需要修改数据文件， 但是有可能是只改某一个|几个地方， 也有可能是新建了一个这个时候就
+
+
+
+5, 修改字段类型，只能使用algorithm=copy(不能使用algorithm=inplace)。允许并发读，不能并发写。
+	例如：ALTER TABLE wftest.user modify password_lifetime bigint, ALGORITHM=copy;
+6, 扩展varchar类型的(字节)长度。 分为两个区段[1-255，[256-)(注意其中的闭包， 并且这里表示的是字节长度。 具体的字段长度取决于字段使用的字符集和编码方式)。 其中前者只需要一个字节表示字段实际长度， 后者需要2个字节来表示实际长度 。 如果在区段内扩展字段(字节)大小,  可以使用algorithm=inplace(允许并发读写) ; 如果跨区段, 则必须使用algorithm=copy(允许并发读), 因为需要重新组织表数据。
+	缩减varchar类型的(字节)长度， 则只能使用algorithm=copy。 这个为啥不使用上面的规则，还没想明白。估计需要找代码。
+7, 修改|删除 列的默认值，只需要修改元数据，因此使用algorithm=instant。
+	例如：ALTER TABLE tbl_name ALTER COLUMN col SET DEFAULT literal, ALGORITHM=INSTANT;
+	注意与“添加具有默认值的列”做区分。此动作需要在添加列的同时，将列设置为默认的值。这是两个子动作。
+8, 改变一个自增列的自增初始值。使用algorithm=inplace。 按照文档描述，实际上是修改内存中的值，而不是数据文件中的值。 至于为啥不使用 algorithm=instant， 个人认为是因为这个值并没有存储在元数据中，可能存储在数据文件中， 实际上也是一个修改数据文件的操作，而不是修改元数据(ib_data文件)。
+9, 修改列的NULL属性(从NULL修改为NOT NULL 或从NOT NULL修改为NULL)。使用algorithm=inplace即可。 允许并发读写， 因为innodb的dynamic行格式有对于NULL与NOT NULL有不同的组织规则(每一个没有NOT NULL约束的字段都需要一个bit来标识自己是否为NULL)，因此需要如果更改NULL属性，需要实质性的行数据重组(当然是表数据)。但是不需要copy数据。
+10, 修改ENUM、SET类型的定义
+	往ENUM、SET类型中增加元素：
+		a, 如果没有造成存储(这里是字段值的存储，不是字段长度的存储)大小变化，并且在现有的元素列表的尾部添加, 
+则使用algorithm=instant|inplace(满足条件的测试看起来都是可以用instant，尚未发现不能用instant的情况);
+		b, 如果造成存储大小变化或者如果在现有元素列表的中间添加， 使用algorithm=copy;
+	这里需要注意ENUM和SET类型的区别，ENUM最终转成int存储，所以，只要在255(包括)个元素内, 都只需要1个字节存储，最多2个字节(最多65535个元素)。 而SET使用不同的bit来表示，一个字节只能表示8个元素，SET最多有64个元素(占用8个字节存储)
+
+
+
+添加|删除 外键
+1, 添加外键， 
+	a, 在启用foreign_key_checks情况下，只能使用algorithm=copy，此时只能并发读，不能并发写。并且，在外键引用的父表上同时加了SHARED_READ_ONLY元数据锁，阻止对父表并发的更新；
+	b, 在禁用foreign_key_checks情况下，可以使用algorithm=inplace。此时允许并发读写。在外键引用的父表上同时加了SHARED_UPGRADABLE元数据锁。
+2, 删除外键，文档描述允许并发，但是测试上观察到，在表上加X表锁，没有并发，但是整个drop时间很短，可能是有并发但是没有观察到的原因。不需要重建表
+
+
+
+三个阶段：
+1, initialization: 这个阶段以open表(open表获取SHARED_UPGRADABLE元数据锁)和准备表的新版本的描述开始。 在这个阶段， 决定使用什么algorithm(default|instant|inplace|copy)以及并发级别lock(default|none|shared|exclusive)，实际上就是锁类型 .根据使用的存储引擎， 请求的操作， 以及请求中显示指定的 algorithm值和lock 值进行判断。
+2, execution: 操作实际执行阶段。 经过第一个阶段后， 会得出需要持有的锁。 在锁保护下，存储引擎执行修改， 但是只处于prepare状态， 不提交。  因此变更对其它session不可见。
+3, final: 执行提交，提交结果对其它session可见。
+
+
+
+如果使用algorithm=instant的话，则lock只能使用default。
+
+
+ha_innobase::check_if_supported_inplace_alter Callers	6985	handler0alter.cc (D:\wangfeng\Virtual_Machines\share\mysql-boost-8.0.23\mysql-8.0.23\storage\innobase\handler)	683
+
+sql_table.cc
+#在server曾检查是否能使用inplace算法
+static bool is_inplace_alter_impossible(TABLE *table,
+                                        HA_CREATE_INFO *create_info,
+                                        const Alter_info *alter_info)
+
+#真正执行inplace修改的地方
+static bool mysql_inplace_alter_table(
+    THD *thd, const dd::Schema &schema, const dd::Schema &new_schema,
+    const dd::Table *table_def, dd::Table *altered_table_def,
+    TABLE_LIST *table_list, TABLE *table, TABLE *altered_table,
+    Alter_inplace_info *ha_alter_info,
+    enum_alter_inplace_result inplace_supported, Alter_table_ctx *alter_ctx,
+    histograms::columns_set &columns, FOREIGN_KEY *fk_key_info,
+    uint fk_key_count, Foreign_key_parents_invalidator *fk_invalidator)
+
+
+handler.cc
+#决定是否可以inplace修改，以及使用的锁信息
+enum_alter_inplace_result handler::check_if_supported_inplace_alter(
+    TABLE *altered_table MY_ATTRIBUTE((unused)),
+    Alter_inplace_info *ha_alter_info)
+
+
+
+
+handler0alter.cc
+#决定是不是需要rebuild表。从这里看起来， instant + CHANGE_CREATE_OPTION(不是修改 ROW_FORMAT, KEY_BLOCK_SIZE or TABLESPACE 的)  + 非INNOBASE_ALTER_REBUILD 都可以不用rebuild表。
+反过来说，不是这里的，都需要rebuild。
+	#问题来了，CHANGE_CREATE_OPTION包括哪些动作？基本上都是table_options https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
+static MY_ATTRIBUTE((warn_unused_result)) bool innobase_need_rebuild(
+    const Alter_inplace_info *ha_alter_info) {
+  if (is_instant(ha_alter_info)) {
+    return (false);
+  }
+
+  Alter_inplace_info::HA_ALTER_FLAGS alter_inplace_flags =
+      ha_alter_info->handler_flags & ~(INNOBASE_INPLACE_IGNORE);
+
+  if (alter_inplace_flags == Alter_inplace_info::CHANGE_CREATE_OPTION &&
+      !(ha_alter_info->create_info->used_fields &
+        (HA_CREATE_USED_ROW_FORMAT | HA_CREATE_USED_KEY_BLOCK_SIZE |
+         HA_CREATE_USED_TABLESPACE))) {
+    /* Any other CHANGE_CREATE_OPTION than changing
+    ROW_FORMAT, KEY_BLOCK_SIZE or TABLESPACE can be done
+    without rebuilding the table. */
+    return (false);
+  }
+
+  return (!!(ha_alter_info->handler_flags & INNOBASE_ALTER_REBUILD));
+}
+
+/** Operations for rebuilding a table in place */
+static const Alter_inplace_info::HA_ALTER_FLAGS INNOBASE_ALTER_REBUILD =
+    Alter_inplace_info::ADD_PK_INDEX | Alter_inplace_info::DROP_PK_INDEX |
+    Alter_inplace_info::CHANGE_CREATE_OPTION
+    /* CHANGE_CREATE_OPTION needs to check innobase_need_rebuild() */
+    | Alter_inplace_info::ALTER_COLUMN_NULLABLE |
+    Alter_inplace_info::ALTER_COLUMN_NOT_NULLABLE |
+    Alter_inplace_info::ALTER_STORED_COLUMN_ORDER |
+    Alter_inplace_info::DROP_STORED_COLUMN |
+    Alter_inplace_info::ADD_STORED_BASE_COLUMN
+    /* ADD_STORED_BASE_COLUMN needs to check innobase_need_rebuild() */
+    | Alter_inplace_info::RECREATE_TABLE;
+
+
+
+
+
+
+
+
+#决定是否instant了
+
+/** Determine if one ALTER TABLE can be done instantly on the table
+@param[in]	ha_alter_info	The DDL operation
+@param[in]	table		InnoDB table
+@param[in]	old_table	old TABLE
+@param[in]	altered_table	new TABLE
+@return Instant_Type accordingly */
+static inline Instant_Type innobase_support_instant(
+    const Alter_inplace_info *ha_alter_info, const dict_table_t *table,
+    const TABLE *old_table, const TABLE *altered_table)
+
+
+
+索引创建分配的缓冲区大小sort_buffer_size
+
+#sql_table.cc
+#非临时表，只是简单rename或者enable|disable keys,且没有指定lock=copy。则走这个分支。
+static bool simple_rename_or_index_change(
+    THD *thd, const dd::Schema &new_schema, TABLE_LIST *table_list,
+    Alter_info::enum_enable_or_disable keys_onoff, Alter_table_ctx *alter_ctx)
+
+
+
+#ha_innodb.cc，innodb的handlerton文件

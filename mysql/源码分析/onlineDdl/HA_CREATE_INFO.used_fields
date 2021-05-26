@@ -1,0 +1,101 @@
+HA_CREATE_INFO::used_fields
+
+/* Bits in used_fields */
+#define HA_CREATE_USED_AUTO (1L << 0)
+#define HA_CREATE_USED_RAID (1L << 1)  // RAID is no longer availble
+#define HA_CREATE_USED_UNION (1L << 2)
+#define HA_CREATE_USED_INSERT_METHOD (1L << 3)
+#define HA_CREATE_USED_MIN_ROWS (1L << 4)
+#define HA_CREATE_USED_MAX_ROWS (1L << 5)
+#define HA_CREATE_USED_AVG_ROW_LENGTH (1L << 6)
+#define HA_CREATE_USED_PACK_KEYS (1L << 7)
+#define HA_CREATE_USED_CHARSET (1L << 8)
+#define HA_CREATE_USED_DEFAULT_CHARSET (1L << 9)
+#define HA_CREATE_USED_DATADIR (1L << 10)
+#define HA_CREATE_USED_INDEXDIR (1L << 11)
+#define HA_CREATE_USED_ENGINE (1L << 12)
+#define HA_CREATE_USED_CHECKSUM (1L << 13)
+#define HA_CREATE_USED_DELAY_KEY_WRITE (1L << 14)
+#define HA_CREATE_USED_ROW_FORMAT (1L << 15)
+#define HA_CREATE_USED_COMMENT (1L << 16)
+#define HA_CREATE_USED_PASSWORD (1L << 17)
+#define HA_CREATE_USED_CONNECTION (1L << 18)
+#define HA_CREATE_USED_KEY_BLOCK_SIZE (1L << 19)
+/** Unused. Reserved for future versions. */
+#define HA_CREATE_USED_TRANSACTIONAL (1L << 20)
+/** Unused. Reserved for future versions. */
+#define HA_CREATE_USED_PAGE_CHECKSUM (1L << 21)
+/** This is set whenever STATS_PERSISTENT=0|1|default has been
+specified in CREATE/ALTER TABLE. See also HA_OPTION_STATS_PERSISTENT in
+include/my_base.h. It is possible to distinguish whether
+STATS_PERSISTENT=default has been specified or no STATS_PERSISTENT= is
+given at all. */
+#define HA_CREATE_USED_STATS_PERSISTENT (1L << 22)
+/**
+   This is set whenever STATS_AUTO_RECALC=0|1|default has been
+   specified in CREATE/ALTER TABLE. See enum_stats_auto_recalc.
+   It is possible to distinguish whether STATS_AUTO_RECALC=default
+   has been specified or no STATS_AUTO_RECALC= is given at all.
+*/
+#define HA_CREATE_USED_STATS_AUTO_RECALC (1L << 23)
+/**
+   This is set whenever STATS_SAMPLE_PAGES=N|default has been
+   specified in CREATE/ALTER TABLE. It is possible to distinguish whether
+   STATS_SAMPLE_PAGES=default has been specified or no STATS_SAMPLE_PAGES= is
+   given at all.
+*/
+#define HA_CREATE_USED_STATS_SAMPLE_PAGES (1L << 24)
+
+/**
+   This is set whenever a 'TABLESPACE=...' phrase is used on CREATE TABLE
+*/
+#define HA_CREATE_USED_TABLESPACE (1L << 25)
+
+/** COMPRESSION="zlib|lz4|none" used during table create. */
+#define HA_CREATE_USED_COMPRESS (1L << 26)
+
+/** ENCRYPTION="Y" used during table create. */
+#define HA_CREATE_USED_ENCRYPT (1L << 27)
+
+/**
+  CREATE|ALTER SCHEMA|DATABASE|TABLE has an explicit COLLATE clause.
+
+  Implies HA_CREATE_USED_DEFAULT_CHARSET.
+*/
+#define HA_CREATE_USED_DEFAULT_COLLATE (1L << 28)
+
+/** SECONDARY_ENGINE used during table create. */
+#define HA_CREATE_USED_SECONDARY_ENGINE (1L << 29)
+
+/**
+  CREATE|ALTER SCHEMA|DATABASE has an explicit ENCRYPTION clause.
+
+  Implies HA_CREATE_USED_DEFAULT_ENCRYPTION.
+*/
+#define HA_CREATE_USED_DEFAULT_ENCRYPTION (1L << 30)
+
+/**
+  This option is used to convey that the create table should not
+  commit the operation and keep the transaction started.
+*/
+constexpr const uint64_t HA_CREATE_USED_START_TRANSACTION{1ULL << 31};
+
+constexpr const uint64_t HA_CREATE_USED_ENGINE_ATTRIBUTE{1ULL << 32};
+constexpr const uint64_t HA_CREATE_USED_SECONDARY_ENGINE_ATTRIBUTE{1ULL << 33};
+
+/**
+  ALTER SCHEMA|DATABASE has an explicit READ_ONLY clause.
+
+  Implies HA_CREATE_USED_READ_ONLY.
+*/
+constexpr const uint64_t HA_CREATE_USED_READ_ONLY{1ULL << 34};
+
+/**
+  These flags convey that the options AUTOEXTEND_SIZE has been
+  specified in the CREATE TABLE statement
+*/
+constexpr const uint64_t HA_CREATE_USED_AUTOEXTEND_SIZE{1ULL << 35};
+
+/*
+  End of bits used in used_fields
+*/
