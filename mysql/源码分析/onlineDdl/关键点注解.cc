@@ -197,6 +197,8 @@ mysql_inplace_alter_table(thd, *schema, *new_schema, old_table_def,
 /*
 table_def, 对应上面的old_table_def ,对应ddl 旧表
 altered_table_def, 对应上面的 table_def, “wftest.#sql-f6b-7”表
+altered_table, 同上面
+table, 同上面
 */
 mysql_inplace_alter_table(
     THD *thd, const dd::Schema &schema, const dd::Schema &new_schema,
@@ -212,3 +214,28 @@ mysql_inplace_alter_table(
 
 "{原数据库名称}/#sql-ib{原表id,所有innodb表唯一}-{临时文件号}"
 "wftest/#sql-ib1065-3591498112"
+
+
+
+#13008
+/*
+同上面
+*/
+table->file->ha_inplace_alter_table(altered_table, ha_alter_info,
+                                            table_def, altered_table_def)
+
+
+
+
+
+
+#hanler0alter.cc  3881 
+/*
+new_table->space, 新表表空间id
+old_table->name.m_name,  旧表的表空间名称wftest/user
+filename, wftest/user.ibd
+dd_space_id, null
+*/
+dd_create_implicit_tablespace(client, thd, new_table->space,
+                                      old_table->name.m_name, filename,
+                                      discarded, dd_space_id)
