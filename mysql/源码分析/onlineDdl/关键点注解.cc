@@ -239,3 +239,88 @@ dd_space_id, null
 dd_create_implicit_tablespace(client, thd, new_table->space,
                                       old_table->name.m_name, filename,
                                       discarded, dd_space_id)
+
+
+
+
+
+#handler0alter.cc  6131
+/*
+
+*/
+row_merge_build_indexes(
+      m_prebuilt->trx, m_prebuilt->table, ctx->new_table, ctx->online,
+      ctx->add_index, ctx->add_key_numbers, ctx->num_to_add_index,
+      altered_table, ctx->add_cols, ctx->col_map, ctx->add_autoinc,
+      ctx->sequence, ctx->skip_pk_sort, ctx->m_stage, add_v, eval_table)
+
+#row0merge.cc  3637
+/*
+old_table, 旧的表 dict_table_t 对象
+new_table, 新建的 "wftest/#sql-ib1065-3591498112" 对应的dict_table_t 对象，名称可能已经用旧表名称替换了
+online, 对应ctx->online
+table,  创建wftest.#sql-f6b-7出来的TABLE类型对象
+eval_table, 如果不需要重建表且存在虚拟列则为 mprebuilt.table 旧表， 否则为altered_table(与这里的table一致), 对应wftest.#sql-f6b-7创建的TABLE对象
+*/
+dberr_t row_merge_build_indexes(
+    trx_t *trx, dict_table_t *old_table, dict_table_t *new_table, bool online,
+    dict_index_t **indexes, const ulint *key_numbers, ulint n_indexes,
+    struct TABLE *table, const dtuple_t *add_cols, const ulint *col_map,
+    ulint add_autoinc, ib_sequence_t &sequence, bool skip_pk_sort,
+    ut_stage_alter_t *stage, const dict_add_v_col_t *add_v,
+    struct TABLE *eval_table)
+
+
+
+
+
+
+#row0merge.cc  3753
+/*
+同上面
+*/
+error = row_merge_read_clustered_index(
+      trx, table, old_table, new_table, online, indexes, fts_sort_idx,
+      psort_info, merge_files, key_numbers, n_indexes, add_cols, add_v, col_map,
+      add_autoinc, sequence, block, skip_pk_sort, &tmpfd, stage, eval_table);
+
+#row0merge.cc  1595
+/*
+同上面
+*/
+static MY_ATTRIBUTE((warn_unused_result)) dberr_t
+    row_merge_read_clustered_index(
+        trx_t *trx, struct TABLE *table, const dict_table_t *old_table,
+        dict_table_t *new_table, bool online, dict_index_t **index,
+        dict_index_t *fts_sort_idx, fts_psort_t *psort_info,
+        merge_file_t *files, const ulint *key_numbers, ulint n_index,
+        const dtuple_t *add_cols, const dict_add_v_col_t *add_v,
+        const ulint *col_map, ulint add_autoinc, ib_sequence_t &sequence,
+        row_merge_block_t *block, bool skip_pk_sort, int *tmpfd,
+        ut_stage_alter_t *stage, struct TABLE *eval_table)
+
+
+
+
+#决定是否 skip_pk_sort
+#handler0alter.cc 3292
+/** Determine whether both the indexes have same set of primary key
+fields arranged in the same order.
+
+Rules when we cannot skip sorting:
+(1) Removing existing PK columns somewhere else than at the end of the PK;
+(2) Adding existing columns to the PK, except at the end of the PK when no
+columns are removed from the PK;
+(3) Changing the order of existing PK columns;
+(4) Decreasing the prefix length just like removing existing PK columns
+follows rule(1), Increasing the prefix length just like adding existing
+PK columns follows rule(2);
+(5) Changing the ascending order of the existing PK columns.
+@param[in]  col_map   mapping of old column numbers to new ones
+@param[in]  old_clust_index index to be compared
+@param[in]  new_clust_index index to be compared
+@retval true if both indexes have same order.
+@retval false. */
+static MY_ATTRIBUTE((warn_unused_result)) bool innobase_pk_order_preserved(
+    const ulint *col_map, const dict_index_t *old_clust_index,
+    const dict_index_t *new_clust_index)
