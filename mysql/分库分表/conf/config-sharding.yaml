@@ -1,0 +1,328 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+######################################################################################################
+# 
+# Here you can configure the rules for the proxy.
+# This example is configuration of sharding rule.
+# 
+######################################################################################################
+#
+schemaName: sharding_db
+
+dataSourceCommon:
+  username: wf
+  password: 8845
+  connectionTimeoutMilliseconds: 30000
+  idleTimeoutMilliseconds: 60000
+  maxLifetimeMilliseconds: 1800000
+  maxPoolSize: 50
+  minPoolSize: 1
+  maintenanceIntervalMilliseconds: 30000
+  driverClassName: com.mysql.jdbc.Driver
+
+dataSources:
+  ds_0: 
+    url: jdbc:mysql://10.45.156.220:3309/zabbix?serverTimezone=SYSTEM&useSSL=false
+  ds_1:
+    url: jdbc:mysql://10.45.156.220:3310/zabbix?serverTimezone=SYSTEM&useSSL=false
+  dsor:
+    url: jdbc:mysql://10.45.156.220:3309/zabbix?serverTimezone=SYSTEM&useSSL=false
+
+rules:
+- !SHARDING_ITEMID
+  tables:
+    items:
+      actualDataNodes: ds_${0..1}.items
+      databaseStrategy:
+        standard:
+          shardingColumn: itemid
+          shardingAlgorithmName: database_inline_itemid
+    application_prototype:
+      actualDataNodes: ds_${0..1}.application_prototype
+    functions:
+      actualDataNodes: ds_${0..1}.functions
+    graphs_items:
+      actualDataNodes: ds_${0..1}.graphs_items
+    httpstepitem:
+      actualDataNodes: ds_${0..1}.httpstepitem
+    item_application_prototype:
+      actualDataNodes: ds_${0..1}.item_application_prototype
+    item_condition:
+      actualDataNodes: ds_${0..1}.item_condition
+    item_discovery:
+      actualDataNodes: ds_${0..1}.item_discovery
+    item_preproc:
+      actualDataNodes: ds_${0..1}.item_preproc
+    items_applications:
+      actualDataNodes: ds_${0..1}.items_applications
+    history_uint:
+      actualDataNodes: ds_${0..1}.history_uint
+    history:
+      actualDataNodes: ds_${0..1}.history
+    trends_uint:
+      actualDataNodes: ds_${0..1}.trends_uint
+    history_str:
+      actualDataNodes: ds_${0..1}.history_str
+    history_text:
+      actualDataNodes: ds_${0..1}.history_text
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+    trends:
+      actualDataNodes: ds_${0..1}.trends
+  bindingTables:
+    - t_order,t_order_item
+    - 
+  broadcastTables:
+    - triggers
+    - graphs
+    - host_discovery
+    - maintenances
+    - hosts
+    - applications
+    - httptest
+    - httpstep
+    - lld_macro_path
+    - widget_field
+    - problem
+    - event_tag
+    - event_suppress
+    - event_recovery
+    - alerts
+    - acknowledges
+    - actions
+    - conditions
+    - group_prototype
+    - actions
+    - usrgrp
+    - regexps
+    - graph_theme
+    - opmessage_grp
+    - media_type
+    - scripts
+    - opmessage_usr
+    - application_discovery
+    - users
+    - users_groups
+    - dashboard
+    - host_discovery
+    - host_inventory
+    - host_tag
+    - media 
+    - autoreg_host
+    - config
+    - corr_condition
+    - corr_condition_group
+    - corr_condition_tag
+    - corr_condition_tagpair
+    - corr_condition_tagvalue
+    - corr_operation
+    - correlation
+    - dashboard_user
+    - dashboard_usrgrp
+    - dbversion
+    - dchecks
+    - dhosts
+    - drules
+    - dservices
+    - escalations
+    - event_suppress
+    - globalmacro
+    - globalvars
+    - group_discovery
+    - history_log
+    - httpstep
+    - httpstep_field
+    - httpstepitem
+    - httptest
+    - httptest_field
+    - httptestitem
+    - icon_map
+    - icon_mapping
+    - interface_discovery
+    - lld_macro_path
+    - maintenance_tag
+    - maintenances
+    - maintenances_groups
+    - maintenances_hosts
+    - maintenances_windows
+    - opcommand
+    - opcommand_grp
+    - opcommand_hst
+    - opconditions
+    - opgroup
+    - opinventory
+    - optemplate
+    - proxy_autoreg_host
+    - proxy_dhistory
+    - proxy_history
+    - screen_user
+    - screen_usrgrp
+    - service_alarms
+    - services
+    - services_links
+    - services_times
+    - slides
+    - slideshow_user
+    - slideshow_usrgrp
+    - slideshows
+    - sysmap_element_trigger
+    - sysmap_element_url
+    - sysmap_shape
+    - sysmap_url
+    - sysmap_user
+    - sysmap_usrgrp
+    - sysmaps
+    - sysmaps_elements
+    - sysmaps_link_triggers
+    - sysmaps_links
+    - tag_filter
+    - task
+    - task_acknowledge
+    - task_close_problem
+    - task_remote_command
+    - task_remote_command_result
+    - timeperiods
+    - trigger_tag
+  defaultDatabaseStrategy:
+    standard:
+      shardingColumn: itemid
+      shardingAlgorithmName: database_inline_itemid
+  defaultTableStrategy:
+    none:
+  
+  shardingAlgorithms:
+    database_inline_itemid:
+      type: INLINE
+      props:
+        algorithm-expression: ds_${itemid % 2}
+  
+  keyGenerators:
+    snowflake:
+      type: SNOWFLAKE
+      props:
+        worker-id: 220
+- !SINGLE_TABLE
+  tables:
+    housekeeper:
+      actualDataNodes: dsor.housekeeper
+  defaultDatabaseStrategy:
+    none:
+  defaultTableStrategy:
+    none:
+
+# #####################################################################################################
+
+#  If you want to connect to MySQL, you should manually copy MySQL driver to lib directory.
+
+# #####################################################################################################
+
+# schemaName: sharding_db
+
+# dataSourceCommon:
+#   username: root
+#   password:
+#   connectionTimeoutMilliseconds: 30000
+#   idleTimeoutMilliseconds: 60000
+#   maxLifetimeMilliseconds: 1800000
+#   maxPoolSize: 50
+#   minPoolSize: 1
+#   maintenanceIntervalMilliseconds: 30000
+
+# dataSources:
+#   ds_0:
+#     url: jdbc:mysql://127.0.0.1:3306/demo_ds_0?serverTimezone=UTC&useSSL=false
+#   ds_1:
+#     url: jdbc:mysql://127.0.0.1:3306/demo_ds_1?serverTimezone=UTC&useSSL=false
+
+# rules:
+# - !SHARDING
+#   tables:
+#     t_order:
+#       actualDataNodes: ds_${0..1}.t_order_${0..1}
+#       tableStrategy:
+#         standard:
+#           shardingColumn: order_id
+#           shardingAlgorithmName: t_order_inline
+#       keyGenerateStrategy:
+#         column: order_id
+#         keyGeneratorName: snowflake
+#     t_order_item:
+#       actualDataNodes: ds_${0..1}.t_order_item_${0..1}
+#       tableStrategy:
+#         standard:
+#           shardingColumn: order_id
+#           shardingAlgorithmName: t_order_item_inline
+#       keyGenerateStrategy:
+#         column: order_item_id
+#         keyGeneratorName: snowflake
+#   bindingTables:
+#     - t_order,t_order_item
+#   defaultDatabaseStrategy:
+#     standard:
+#       shardingColumn: user_id
+#       shardingAlgorithmName: database_inline
+#   defaultTableStrategy:
+#     none:
+  
+#   shardingAlgorithms:
+#     database_inline:
+#       type: INLINE
+#       props:
+#         algorithm-expression: ds_${user_id % 2}
+#     t_order_inline:
+#       type: INLINE
+#       props:
+#         algorithm-expression: t_order_${order_id % 2}
+#     t_order_item_inline:
+#       type: INLINE
+#       props:
+#         algorithm-expression: t_order_item_${order_id % 2}
+  
+#   keyGenerators:
+#     snowflake:
+#       type: SNOWFLAKE
+#       props:
+#         worker-id: 123
