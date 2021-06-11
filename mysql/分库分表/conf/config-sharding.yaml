@@ -33,7 +33,7 @@ dataSourceCommon:
   maxPoolSize: 50
   minPoolSize: 1
   maintenanceIntervalMilliseconds: 30000
-  driverClassName: com.mysql.jdbc.Driver
+  driverClassName: com.mysql.cj.jdbc.Driver
 
 dataSources:
   ds_0: 
