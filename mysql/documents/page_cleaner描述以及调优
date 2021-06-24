@@ -8,9 +8,22 @@ pg_cleaner线程运行了太长时间了。page cleaner线程的作用在于从b
 
 
 2021.6.23更新:
-pg_cleaner用来执行buffer pool的flush，包括定时的1s(这个还不确定)一次从LRU列表尾部刷新最多innodb_lru_scan_depth个page到磁盘; 或者在redo日志切换时或者发生checkpoint时，从buffer pool的flush list刷新page到磁盘。在page_cleaner线程内部, 通过异步的方式刷新page到磁盘。 
-page_cleaner线程数量受参数 innodb_page_cleaners 控制，默认值4，最大值等于innodb_buffer_pool_instances。从代码中来看，
+pg_cleaner用来执行buffer pool的flush，包括定时的1s一次从LRU列表尾部刷新(从LRU列表尾部刷新同样发生在当io读线程在读新的page 到buffer的时候，找不到空闲的page了，此时也需要从LRU尾部进行刷新)最多innodb_lru_scan_depth个page到磁盘; 或者在redo日志切换时或者发生checkpoint时，从buffer pool的flush list刷新page到磁盘。在page_cleaner线程内部, 通过异步的方式刷新page到磁盘。 
+page_cleaner线程数量受参数 innodb_page_cleaners 控制，默认值4，最大值等于innodb_buffer_pool_instances。从代码中来看，在server启动时，启动了innodb_page_cleaners 个线程来服务。 
 
+
+与buffer刷新相关的参数:
+	1, innodb_max_dirty_pages_pct_lwm, 默认值10. 指定当脏页的占整个buffer的百分比的时候， 开始执行刷新. 目的在于确保脏页所占百分比不会达到innodb_max_dirty_pages_pct 设定的最大值. 当设置为0时, 禁用预刷新. innodb_max_dirty_pages_pct_lwm值需要小于innodb_max_dirty_pages_pct。
+	2, innodb_max_dirty_pages_pct, 脏页所占百分比的最大值, 这是一个设定的脏页刷新目标，没有具体的行为对应。
+	3, innodb_flush_neighbors, 设置是否在刷新page时，连同同一个extent的其它脏页一起flush. 有如下取值:
+		0: 禁用刷新相同extent的页
+		1: 刷新同个extent的与当前页相邻的脏页
+		2: 刷新同个extent的脏页
+		当使用HDD磁盘时，磁盘寻址是一个可观的消耗，配置为1/2可以提升性能；对于ssd固态硬盘，没有提升。
+	4, innodb_lru_scan_depth, 设置在每秒一次的pg_cleaner刷新LRU尾部脏块的时候，从尾部搜索脏块并flush到磁盘的深度. 默认值1024, 取值范围100~2的32(64)次方-1. innodb_lru_scan_depth * innodb_buffer_pool_instances 定义了所有page_cleaner线程每秒的工作量. 这个值的设置，需要达到的目标是, 从小往大调整，直到很少看到0个空闲块(存在空闲块, 但是不用太多)。
+	5, innodb_adaptive_flushing_lwm设置了针对redo日志文件使用率的低水线指标，当redo使用超过这个指标，则自适应刷新开始刷新脏页, 以避免当redo发生切换时的io突增
+	6, innodb_flushing_avg_loops, 设置自适应刷新保持当天刷新率的次数。 越高,则自适应刷新对负载变化的响应越慢, 反映在io吞吐量上就是平缓的曲线, 没有突增. 
+	7, innodb_idle_flush_pct 空闲刷新百分比, 主要为了延长ssd硬盘的使用寿命，没有效率目标。
 
 值的指出的是，pg_cleaner的刷新时间指标，如果启用对应的监控，结果保存在information_schema.innodb_metrics中. 值得看一看。
 srv0mon.h, monitor_id_t
