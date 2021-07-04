@@ -1,0 +1,268 @@
+
+fsp0types.h
+/** File space extent size in pages
+page size | file space extent size
+----------+-----------------------
+   4 KiB  | 256 pages = 1 MiB
+   8 KiB  | 128 pages = 1 MiB
+  16 KiB  |  64 pages = 1 MiB
+  32 KiB  |  64 pages = 2 MiB
+  64 KiB  |  64 pages = 4 MiB
+*/
+#define FSP_EXTENT_SIZE                                                 \
+  static_cast<page_no_t>(                                               \
+      ((UNIV_PAGE_SIZE <= (16384)                                       \
+            ? (1048576 / UNIV_PAGE_SIZE)                                \
+            : ((UNIV_PAGE_SIZE <= (32768)) ? (2097152 / UNIV_PAGE_SIZE) \
+                                           : (4194304 / UNIV_PAGE_SIZE)))))
+                                           
+
+                                           
+fsp0types.h
+每一个表空间文件，
+第偏移0个页为扩展描述符页，扩展描述符页从第150字节开始，以 [ 8字节segment id + 12字节前后node地址 + 4字节的描述符状态 + 16/32/64字节的位图 ]作为一个node结构，描述一个扩展的page。node结构持续到页尾。以XDES_DESCRIBED_PER_PAGE个页为一个轮回，第n*XDES_DESCRIBED_PER_PAGE个页再次为扩展描述符页。
+第174字节开始，每2个bit描述此扩展内一个page，视FSP_EXTENT_SIZE大小，持续16、32、64个字节。2bit中的第一个bit表示对应page是否使用中，
+
+第偏移1个页为插入缓冲区位图，从94字节开始，以4个bit表示一个页描述符(按照4bit计算，第0、1两个bit表示对应page的可用空间量，可用空间量是动态变化的，由页中空闲空间/当前插入记录大小的倍数，如果大于3倍，则为3，等于3倍，则为2，其它按照实际值；第2个bit表示IBUF_BITMAP_BUFFERED：TRUE if there are buffered  changes for the page，标志对应页是否有缓存的改变未写入；第3个bit，BUF_BITMAP_IBUF:  TRUE if page is a part of  the ibuf tree, excluding the   root page, or is in the free   list of the ibuf. 标志对应页是否为插入缓冲区树的一部分（排除root页）或者处于插入缓冲区空闲列表中。cluster索引不能被缓存。 )，因此，假设页大小为s1，则第2页这个缓冲区位图可以表示s1字节大小个页，因此，每（s1个字节数*s1页大小）的空间大小为一个轮回。如果物理表空间大小超过这个大小，则会在下一个轮回的第1个偏移页为当前轮回的插入缓冲区位图。插入缓冲区的页号偏移为 FSP_IBUF_BITMAP_OFFSET + XDES_DESCRIBED_PER_PAGE * x(0,1,2..) , XDES_DESCRIBED_PER_PAGE 为页大小。例如，如果页大小为16K，则一个轮回为256M。则分别在表空间开始的第1、16385、32769、1+n*16384为插入缓冲区位图页。
+第偏移2个页为FSP_FIRST_INODE_PAGE_NO页。                                        
+/* Number of pages described in a single descriptor page: currently each page
+description takes less than 1 byte; a descriptor page is repeated every
+this many file pages */
+/* #define XDES_DESCRIBED_PER_PAGE        UNIV_PAGE_SIZE */
+/* This has been replaced with either UNIV_PAGE_SIZE or page_zip->size. */
+
+/** @name The space low address page map
+The pages at FSP_XDES_OFFSET and FSP_IBUF_BITMAP_OFFSET are repeated
+every XDES_DESCRIBED_PER_PAGE pages in every tablespace. */
+/* @{ */
+/*--------------------------------------*/
+#define FSP_XDES_OFFSET 0        /* !< extent descriptor */
+#define FSP_IBUF_BITMAP_OFFSET 1 /* !< insert buffer bitmap */
+                                 /* The ibuf bitmap pages are the ones whose
+                                 page number is the number above plus a
+                                 multiple of XDES_DESCRIBED_PER_PAGE */
+
+#define FSP_FIRST_INODE_PAGE_NO 2 /*!< in every tablespace */
+/* The following pages exist in the system tablespace (space 0). */
+
+#define FSP_IBUF_HEADER_PAGE_NO \
+  3 /*!< insert buffer          \
+    header page, in             \
+    tablespace 0 */
+#define FSP_IBUF_TREE_ROOT_PAGE_NO \
+  4 /*!< insert buffer             \
+    B-tree root page in            \
+    tablespace 0 */
+    /* The ibuf tree root page number in
+    tablespace 0; its fseg inode is on the page
+    number FSP_FIRST_INODE_PAGE_NO */
+#define FSP_TRX_SYS_PAGE_NO \
+  5 /*!< transaction        \
+    system header, in       \
+    tablespace 0 */
+#define FSP_FIRST_RSEG_PAGE_NO  \
+  6 /*!< first rollback segment \
+    page, in tablespace 0 */
+#define FSP_DICT_HDR_PAGE_NO    \
+  7 /*!< data dictionary header \
+    page, in tablespace 0 */
+
+/* The following page exists in each v8 Undo Tablespace.
+(space_id = SRV_LOG_SPACE_FIRST_ID - undo_space_num)
+(undo_space_num = rseg_array_slot_num + 1) */
+
+#define FSP_RSEG_ARRAY_PAGE_NO      \
+  3 /*!< rollback segment directory \
+    page number in each undo tablespace */
+
+    
+    
+双写缓冲区位于系统表空间的第1,2个扩展上。FSP_EXTENT_SIZE位于fsp0types.h
+mtr0log.ic
+/* check whether the page is in the doublewrite buffer;
+  the doublewrite buffer is located in pages
+  FSP_EXTENT_SIZE, ..., 3 * FSP_EXTENT_SIZE - 1 in the
+  system tablespace */
+  
+  
+  
+根据页号计算页对应在扩展描述符所在页的node索引, fsp0fsp.ic：
+按照页号以page_size.physical()大小取余后, 除以FSP_EXTENT_SIZE。
+UNIV_INLINE
+ulint xdes_calc_descriptor_index(const page_size_t &page_size, ulint offset) {
+  return (ut_2pow_remainder(offset, page_size.physical()) / FSP_EXTENT_SIZE);
+}
+
+
+
+根据页号计算页对应的扩展描述符所在页, fsp0fsp.ic：
+按照页号以page_size.physical()大小向下取整
+page_no_t xdes_calc_descriptor_page(const page_size_t &page_size,
+                                    page_no_t offset) {
+...........省略了assert和debug代码...............
+
+  return (ut_2pow_round(offset, page_size.physical()));
+}
+
+
+FSP_FREE_FRAG 列表, 这个列表中保存不属于任何segment的, 并且扩展中只有部分页被使用的extent列表. 当mysql需要分配一个新的page时, 会从这里取出来一个扩展, 并从扩展中找到尚未分配 使用的page, 当page被分配使用, 则会更新对应extent的页描述bit位图. 若此时此 extent 描述的 page 全部被使用, 则此 extent 描述符结构（40字节结构） 会从FSP_FREE_FRAG被移除掉, 并放入 FSP_FULL_FRAG 列表。
+
+
+
+buf0buf.cc
+在这个函数里根据页地址，创建内存page, 其中包含了从内存池中获取free page, 搜索LRU, 写脏块等逻辑. 
+buf_block_t *buf_page_create(const page_id_t &page_id,
+                             const page_size_t &page_size,
+                             rw_lock_type_t rw_latch, mtr_t *mtr)
+                             
+                             
+FSP_SEG_INODES_FREE 列表，这个列表存储了页节点列表，其中的页类型为FIL_PAGE_INODE, Index node, 页中从50字节开始直到页尾(去掉不能整除的部分, 10字节.), 以192字节为一个 inode slot 结构进行分配. 每一个 inode 包括 8字节segment id, 4字节 FSEG_NOT_FULL_N_USED, 3个列表 FSEG_NOT_FULL_N_USED 、 FSEG_NOT_FULL 、FSEG_FULL , 每个列表结构包含4字节长度 + 首元素地址 ( 4字节页号 + 2字节页内偏移地址 ) + 尾元素地址 ( 4字节页号 + 2字节页内偏移地址 ) . 以及4字节 FSEG_MAGIC_N , 和 FSP_EXTENT_SIZE / 2 个 page slot , 每个 page slot 占4字节大小. page slot 记录被分配给此 inode 使用的页号, 表示此page slot已分配. 按照16K页大小, 每页可包含85个 inode结构. 若此页中所有 inode 结构均已分配给对应的 segment id, 则此页会从 FSP_SEG_INODES_FREE 列表移除, 并放入 FSP_SEG_INODES_FULL 列表. 
+
+
+SDI: Tablespace dictionary Index
+
+
+
+创建索引节点的时候, 每一个索引分配在 block2 中分配两个 inode, "Create the two new segments (one, in the case of an ibuf tree) for the index tree; the segment headers are put on the allocated root page  (for an ibuf tree, not in the root, but on a separate ibuf header  page)", 其中前一个作为inode header, 为 root, 后一个页作为  (因为 inode 中使用4字节表示一个page no, 每一个 inode 结构中仅能表示一个扩展 extent 所包含的页数量的一半, 因此需要分配2个inode, 来完整的表示一个extent所包含的页, 纯属个人猜测. ). SDI索引会首先分配, 占用 0 、1 两个 inode. 接下来是主键索引(cluster index),占用2 、 3 两个inode, 剩下的索引按照先后顺序, 分别占用连续2个inode.  block0的 偏移 1059 往后的4字节记录了SDI索引的root节点所在的页号. 
+
+
+
+
+
+
+三个系统列定义, DATA_ROW_ID, DATA_TRX_ID, DATA_ROLL_PTR_LEN:
+data0type.h
+/* Precise data types for system columns and the length of those columns;
+NOTE: the values must run from 0 up in the order given! All codes must
+be less than 256 */
+#define DATA_ROW_ID 0     /* row id: a 48-bit integer */  /*按顺序出现在第0个*/
+#define DATA_ROW_ID_LEN 6 /* stored length for row id */
+
+/** Transaction id: 6 bytes */
+constexpr size_t DATA_TRX_ID = 1;                         /*按顺序出现在第1个*/
+
+/** Transaction ID type size in bytes. */
+constexpr size_t DATA_TRX_ID_LEN = 6;
+
+/** Rollback data pointer: 7 bytes */
+constexpr size_t DATA_ROLL_PTR = 2;                       /*按顺序出现在第2个*/
+
+/** Rollback data pointer type size in bytes. */
+constexpr size_t DATA_ROLL_PTR_LEN = 7;
+
+#define DATA_N_SYS_COLS 3 /* number of system columns defined above */
+
+
+
+如果指定的cluster index不能保证唯一，则会自动添加一个DATA_ROW_ID列来保证唯一性：
+dict0dict.cc
+/** Builds the internal dictionary cache representation for a clustered
+ index, containing also system fields not defined by the user.
+ @return own: the internal representation of the clustered index */
+static dict_index_t *dict_index_build_internal_clust(
+    const dict_table_t *table, /*!< in: table */
+    dict_index_t *index)       /*!< in: user representation of
+                               a clustered index */
+..................省略部分代码...............................
+  if (!dict_index_is_unique(index)) {
+    dict_index_add_col(new_index, table, table->get_sys_col(DATA_ROW_ID), 0,
+                       true);
+    trx_id_pos++;
+  }
+
+
+
+聚簇索引同样会添加DATA_TRX_ID列：
+dict_index_add_col(new_index, table, table->get_sys_col(DATA_TRX_ID), 0, true);
+
+每一个page中有两个记录列表，一个record list，一个free record list。record list的首元素由页尾-8字节后的连续两字节（页尾-10，页尾-9两字节）指定，初始指向页中的极小值infimum。 空闲列表的首元素由45、46两字节保存的指针指定，初始指针值为0000。 
+
+
+
+record的值往前的5字节内容解释：
+以下内容来自storage\innobase\include\rem0rec.ic
+ (1) byte offset		(2) bit usage within byte
+        downward from
+        origin ->	1	8 bits relative offset of next record
+                        2	8 bits relative offset of next record
+                                  the relative offset is an unsigned 16-bit
+                                  integer:
+                                  (offset_of_next_record
+                                   - offset_of_this_record) mod 64Ki,
+                                  where mod is the modulo as a non-negative
+                                  number;
+                                  we can calculate the offset of the next
+                                  record with the formula:
+                                  relative_offset + offset_of_this_record
+                                  mod UNIV_PAGE_SIZE
+                        3	3 bits status:
+                                        000=conventional record
+                                        001=node pointer record (inside B-tree)
+                                        010=infimum record
+                                        011=supremum record
+                                        1xx=reserved
+                                5 bits heap number
+                        4	8 bits heap number
+                        5	4 bits n_owned
+                                4 bits info bits
+								
+关于记录与dir slot的关系的解释：
+以下内容来自storage\innobase\page\page0page.cc
+The index page consists of a page header which contains the page's
+id and other information. On top of it are the index records
+in a heap linked into a one way linear list according to alphabetic order.
+
+Just below page end is an array of pointers which we call page directory,
+to about every sixth record in the list. The pointers are placed in
+the directory in the alphabetical order of the records pointed to,
+enabling us to make binary search using the array. Each slot n:o I
+in the directory points to a record, where a 4-bit field contains a count
+of those records which are in the linear list between pointer I and
+the pointer I - 1 in the directory, including the record
+pointed to by pointer I and not including the record pointed to by I - 1.
+We say that the record pointed to by slot I, or that slot I, owns
+these records. The count is always kept in the range 4 to 8, with
+the exception that it is 1 for the first slot, and 1--8 for the second slot.
+
+An essentially binary search can be performed in the list of index
+records, like we could do if we had pointer to every record in the
+page directory. The data structure is, however, more efficient when
+we are doing inserts, because most inserts are just pushed on a heap.
+Only every 8th insert requires block move in the directory pointer
+table, which itself is quite small. A record is deleted from the page
+by just taking it off the linear list and updating the number of owned
+records-field of the record which owns it, and updating the page directory,
+if necessary. A special case is the one when the record owns itself.
+Because the overhead of inserts is so small, we may also increase the
+page size from the projected default of 8 kB to 64 kB without too
+much loss of efficiency in inserts. Bigger page becomes actual
+when the disk transfer rate compared to seek and latency time rises.
+On the present system, the page size is set so that the page transfer
+time (3 ms) is 20 % of the disk random access time (15 ms).
+
+When the page is split, merged, or becomes full but contains deleted
+records, we have to reorganize the page.
+
+Assuming a page size of 8 kB, a typical index page of a secondary
+index contains 300 index entries, and the size of the page directory
+is 50 x 4 bytes = 200 bytes.
+具体来讲，就是page dir slot是从页尾的8字节往前推，倒数第10~9两个字节为slot0，倒数第12~11位slot1，依次类推。每一个slot占2字节，表示4-8个记录（slot0只标记1条记录infinium）。slot是按照指向的record的字母顺序升序的，便于二分搜索。每一个slot的内容为指向对应record的页内偏移地址。被slotL指向的record拥有(owned)[slotL,slotL-1)之间的记录，注意开闭区间。被slotL指向的record有4个bit表示拥有的记录数。其他的record对应bit为0，并通过next field不断的迭代找下一条记录，直到找到一个owned不为0的record，被发现的record则为此记录的owned记录。
+
+
+索引记录插入过程：
+前提：非压缩页，非需要外部存储的big记录（大于空页可用空间的一半）
+1，计算编码后的记录物理空间大小；
+2，首先判断空闲列表是否不为空（通过判断第一个元素的偏移地址是否为空），不为空的话判断第一个元素（被删除的记录）所占空间是否可容纳新插入记录，
+	是：元素的首地址为新记录的首地址，将空闲列表的首地址更新为列表的下一个元素（或者空），从garbage中减去新记录所占空间。
+	否：计算page剩余空间{总可用空间((ulint)(UNIV_PAGE_SIZE - PAGE_NEW_SUPREMUM_END - PAGE_DIR -
+                    2 * PAGE_DIR_SLOT_SIZE)) - 已使用空间(page_header_get_field(page, PAGE_HEAP_TOP) - PAGE_NEW_SUPREMUM_END + page_dir_calc_reserved_space(n_recs + page_dir_get_n_heap(page) - 2))，总可用空间为页大小减去页头(直到PAGE_NEW_SUPREMUM_END结束)，再减去页尾8字节lsn，减去2个目录槽大小。已使用空间为record list顶端地址减去页头(直到PAGE_NEW_SUPREMUM_END结束)，再减去PAGE_DIR_SLOT_SIZE目录槽所占空间(一个目录槽2字节，可表示最小4条最大8条记录，取4进行计算)}。
+		如果可用空间大于记录大小：则record list的顶端偏移地址为新记录的插入开始地址，更新record list顶端偏移地址为加上新记录大小，堆号为当前记录数，并更新堆号为原堆号加1.
+		如果可用地址空间小于记录大小：
+3，插入新记录。
+4，更新record list的关系，在之前的列表前后元素中间加入新插入的记录，并更新页中记录数
+5，将n_owned字段设置为0；并且设置堆号。关于heap_no field，一个record即为一个heap，而不论是否此record是否被标记删除。这是从空间分配的角度来解析page中的空间使用。
+6，更新PAGE_DIRECTION，PAGE_N_DIRECTION，PAGE_LAST_INSERT字段
+7，更新owned记录的own值. 
+8，如果owned==8(更新后的owned==9)，则分裂slot。假设owned记录对应slotn，则将从slotn 到dir slot尾部的slot像前挪2个字节的位置，空出来的位置为新的slot。这样旧的slotn称为slotn+1，新加入的slot成为slotn。将旧的slotn owned的记录数分一半给新的slot，并更新对应record的owned计数。
+9，写日志。
+

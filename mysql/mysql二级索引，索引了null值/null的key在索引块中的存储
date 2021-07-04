@@ -1,0 +1,1 @@
+mysql二级索引可以将null的key索引起来，并且将null的key作为顺序最小的记录。对于null key的记录，没有保存null的key，而是仅仅保存了null key记录对应的主键的id。
