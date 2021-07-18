@@ -55,7 +55,7 @@
 											"font": "Arial;13;0",
 											"left": 330,
 											"top": 42,
-											"width": 194.390625,
+											"width": 200.8271484375,
 											"height": 13,
 											"text": "Redo_Log_Data_Manager::start()",
 											"wordWrap": true
@@ -64,7 +64,7 @@
 									"font": "Arial;13;0",
 									"left": 320,
 									"top": 32,
-									"width": 214.390625,
+									"width": 220.8271484375,
 									"height": 33,
 									"nameLabel": {
 										"$ref": "AAAAAAF6MZKC1ApmotA="
@@ -89,7 +89,7 @@
 											"font": "Arial;13;0",
 											"left": 282,
 											"top": 122,
-											"width": 291.09716796875,
+											"width": 297.375,
 											"height": 39,
 											"text": "获取检查点lsn, 并且将lsn对应的redo文件块读取到自身的缓冲区  将获取lsn时对应的redo文件头copy到自身的缓冲区",
 											"wordWrap": true
@@ -98,7 +98,7 @@
 									"font": "Arial;13;0",
 									"left": 272,
 									"top": 112,
-									"width": 311.09716796875,
+									"width": 317.375,
 									"height": 72,
 									"nameLabel": {
 										"$ref": "AAAAAAF6MZRvfQpwz4I="
@@ -123,7 +123,7 @@
 											"font": "Arial;13;0",
 											"left": 362,
 											"top": 226,
-											"width": 156.787109375,
+											"width": 165.6484375,
 											"height": 13,
 											"text": "创建xtrabackup_logfile文件",
 											"wordWrap": true
@@ -132,7 +132,7 @@
 									"font": "Arial;13;0",
 									"left": 352,
 									"top": 216,
-									"width": 176.787109375,
+									"width": 185.6484375,
 									"height": 33,
 									"nameLabel": {
 										"$ref": "AAAAAAF6MZzQ9Ap7rps="
@@ -202,7 +202,7 @@
 											"font": "Arial;13;0",
 											"left": 306,
 											"top": 298,
-											"width": 286.01904296875,
+											"width": 288.919921875,
 											"height": 39,
 											"text": "将自身缓冲区的redo文件头修改创建者和时间戳后  写入到xtrabackup_logfile文件  作为自己的日志文件头",
 											"wordWrap": true
@@ -211,7 +211,7 @@
 									"font": "Arial;13;0",
 									"left": 296,
 									"top": 288,
-									"width": 306.01904296875,
+									"width": 308.919921875,
 									"height": 59,
 									"nameLabel": {
 										"$ref": "AAAAAAF6MZ0EegqPAds="
@@ -279,9 +279,9 @@
 												"$ref": "AAAAAAF6MogkZgqvM2M="
 											},
 											"font": "Arial;13;0",
-											"left": 361.21630859375,
+											"left": 368.04638671875,
 											"top": 391.5,
-											"width": 178.4326171875,
+											"width": 192.0927734375,
 											"height": 15,
 											"text": "指定了lock-ddl-per-table参数？",
 											"wordWrap": true
@@ -290,7 +290,7 @@
 									"font": "Arial;13;0",
 									"left": 272,
 									"top": 384,
-									"width": 356.865234375,
+									"width": 384.185546875,
 									"height": 30,
 									"nameLabel": {
 										"$ref": "AAAAAAF6MogkZwqwM6c="
@@ -360,7 +360,7 @@
 											"font": "Arial;13;0",
 											"left": 298,
 											"top": 450,
-											"width": 328.6181640625,
+											"width": 330.27490234375,
 											"height": 39,
 											"text": "通过begin显示开启一个事务  在事务内部select每一张表(非全文索引辅助表，非临时表)  以达成通过事务锁定表元数据的目的",
 											"wordWrap": true
@@ -369,7 +369,7 @@
 									"font": "Arial;13;0",
 									"left": 288,
 									"top": 440,
-									"width": 348.6181640625,
+									"width": 350.27490234375,
 									"height": 72,
 									"nameLabel": {
 										"$ref": "AAAAAAF6Mohn7ArDDOU="
@@ -440,7 +440,7 @@
 											"font": "Arial;13;0",
 											"left": 362,
 											"top": 578,
-											"width": 169.787109375,
+											"width": 178.6484375,
 											"height": 26,
 											"text": "读一批redo  并写入xtrabackup_logfile文件",
 											"wordWrap": true
@@ -449,7 +449,7 @@
 									"font": "Arial;13;0",
 									"left": 352,
 									"top": 568,
-									"width": 189.787109375,
+									"width": 198.6484375,
 									"height": 46,
 									"nameLabel": {
 										"$ref": "AAAAAAF6MpVNKQrbSWk="
@@ -620,7 +620,7 @@
 										"$ref": "AAAAAAF6MogkZgqvM2M="
 									},
 									"lineStyle": 2,
-									"points": "628:400;720:400;720:592;541:592",
+									"points": "655:400;720:400;720:592;550:592",
 									"nameLabel": {
 										"$ref": "AAAAAAF6MpeGPgsJ3nQ="
 									}
@@ -689,7 +689,7 @@
 											"font": "Arial;13;0",
 											"left": 1146,
 											"top": 42,
-											"width": 144.54248046875,
+											"width": 153.080078125,
 											"height": 13,
 											"text": "xtrabackup_backup_func",
 											"wordWrap": true
@@ -698,7 +698,7 @@
 									"font": "Arial;13;0",
 									"left": 1136,
 									"top": 32,
-									"width": 164.54248046875,
+									"width": 173.080078125,
 									"height": 33,
 									"nameLabel": {
 										"$ref": "AAAAAAF6Mxl7YwsnSR0="
@@ -723,7 +723,7 @@
 											"font": "Arial;13;0",
 											"left": 1058,
 											"top": 106,
-											"width": 340.35498046875,
+											"width": 360.59130859375,
 											"height": 26,
 											"text": "redo_mgr.set_copy_interval(xtrabackup_log_copy_interval)  1秒间隔copy",
 											"wordWrap": true
@@ -732,7 +732,7 @@
 									"font": "Arial;13;0",
 									"left": 1048,
 									"top": 96,
-									"width": 360.35498046875,
+									"width": 380.59130859375,
 									"height": 46,
 									"nameLabel": {
 										"$ref": "AAAAAAF6MxqC+AsxGJc="
@@ -791,7 +791,7 @@
 											"font": "Arial;13;0",
 											"left": 1178,
 											"top": 298,
-											"width": 104.01904296875,
+											"width": 106.919921875,
 											"height": 26,
 											"text": "redo_mgr.start() 启动redo拷贝线程",
 											"wordWrap": true
@@ -800,7 +800,7 @@
 									"font": "Arial;13;0",
 									"left": 1168,
 									"top": 288,
-									"width": 124.01904296875,
+									"width": 126.919921875,
 									"height": 46,
 									"nameLabel": {
 										"$ref": "AAAAAAF6MxxYlAtKUkg="
@@ -825,7 +825,7 @@
 											"font": "Arial;13;0",
 											"left": 1178,
 											"top": 386,
-											"width": 130.0380859375,
+											"width": 135.36376953125,
 											"height": 13,
 											"text": "收集innodb表文件列表",
 											"wordWrap": true
@@ -834,7 +834,7 @@
 									"font": "Arial;13;0",
 									"left": 1168,
 									"top": 376,
-									"width": 150.0380859375,
+									"width": 155.36376953125,
 									"height": 33,
 									"nameLabel": {
 										"$ref": "AAAAAAF6MxzNHwtUPtw="
@@ -859,7 +859,7 @@
 											"font": "Arial;13;0",
 											"left": 1154,
 											"top": 458,
-											"width": 182.126953125,
+											"width": 191.36279296875,
 											"height": 26,
 											"text": "flush_changed_page_bitmaps()  刷新改变页位图",
 											"wordWrap": true
@@ -868,7 +868,7 @@
 									"font": "Arial;13;0",
 									"left": 1144,
 									"top": 448,
-									"width": 202.126953125,
+									"width": 211.36279296875,
 									"height": 46,
 									"nameLabel": {
 										"$ref": "AAAAAAF6Mx1bZAthYQE="
@@ -891,9 +891,9 @@
 												"$ref": "AAAAAAF6Mx5iPAtsotM="
 											},
 											"font": "Arial;13;0",
-											"left": 1176.62353515625,
+											"left": 1181.235107421875,
 											"top": 533,
-											"width": 145.2470703125,
+											"width": 154.47021484375,
 											"height": 26,
 											"text": "是否增量备份  xtrabackup_incremental?",
 											"wordWrap": true
@@ -902,7 +902,7 @@
 									"font": "Arial;13;0",
 									"left": 1104,
 									"top": 520,
-									"width": 290.494140625,
+									"width": 308.9404296875,
 									"height": 52,
 									"nameLabel": {
 										"$ref": "AAAAAAF6Mx5iPAttHg0="
@@ -972,7 +972,7 @@
 											"font": "Arial;13;0",
 											"left": 1202,
 											"top": 682,
-											"width": 104.0380859375,
+											"width": 109.36376953125,
 											"height": 26,
 											"text": "将innodb列表文件  包装成迭代器",
 											"wordWrap": true
@@ -981,7 +981,7 @@
 									"font": "Arial;13;0",
 									"left": 1192,
 									"top": 672,
-									"width": 124.0380859375,
+									"width": 129.36376953125,
 									"height": 46,
 									"nameLabel": {
 										"$ref": "AAAAAAF6Mx7WHguD9xs="
@@ -1052,7 +1052,7 @@
 											"font": "Arial;13;0",
 											"left": 1410,
 											"top": 618,
-											"width": 132.919921875,
+											"width": 135.1796875,
 											"height": 13,
 											"text": "收集有变更的page位图",
 											"wordWrap": true
@@ -1061,7 +1061,7 @@
 									"font": "Arial;13;0",
 									"left": 1400,
 									"top": 608,
-									"width": 152.919921875,
+									"width": 155.1796875,
 									"height": 33,
 									"nameLabel": {
 										"$ref": "AAAAAAF6Mx8DOAuVunc="
@@ -1108,7 +1108,7 @@
 										"$ref": "AAAAAAF6Mx5iPAtsotM="
 									},
 									"lineStyle": 2,
-									"points": "1393:544;1464:544;1464:608",
+									"points": "1412:544;1464:544;1464:608",
 									"nameLabel": {
 										"$ref": "AAAAAAF6Mx+yCAufYz0="
 									}
@@ -1153,7 +1153,7 @@
 										"$ref": "AAAAAAF6Mx8DOAuUmAQ="
 									},
 									"lineStyle": 2,
-									"points": "1424:640;1424:696;1315:696",
+									"points": "1424:640;1424:696;1320:696",
 									"nameLabel": {
 										"$ref": "AAAAAAF6MyE3Ywuw4us="
 									}
@@ -1177,7 +1177,7 @@
 											"font": "Arial;13;0",
 											"left": 1162,
 											"top": 770,
-											"width": 212.34814453125,
+											"width": 215.62353515625,
 											"height": 52,
 											"text": "启动并行线程  拷贝innodb表文件  如果是增量备份  在拷贝过程中同时应用过滤器  只拷贝自上次备份以来有变化的block",
 											"wordWrap": true
@@ -1186,7 +1186,7 @@
 									"font": "Arial;13;0",
 									"left": 1152,
 									"top": 760,
-									"width": 232.34814453125,
+									"width": 235.62353515625,
 									"height": 72,
 									"nameLabel": {
 										"$ref": "AAAAAAF6MyFitAu6mB4="
@@ -1256,7 +1256,7 @@
 											"font": "Arial;13;0",
 											"left": 1202,
 											"top": 922,
-											"width": 130.0380859375,
+											"width": 135.36376953125,
 											"height": 13,
 											"text": "开始备份非innodb文件",
 											"wordWrap": true
@@ -1265,7 +1265,7 @@
 									"font": "Arial;13;0",
 									"left": 1192,
 									"top": 912,
-									"width": 150.0380859375,
+									"width": 155.36376953125,
 									"height": 33,
 									"nameLabel": {
 										"$ref": "AAAAAAF6MyNM9gvQKxs="
@@ -1335,7 +1335,7 @@
 											"font": "Arial;13;0",
 											"left": 1538,
 											"top": 778,
-											"width": 74.4326171875,
+											"width": 79.0791015625,
 											"height": 13,
 											"text": "backup_start",
 											"wordWrap": true
@@ -1344,7 +1344,7 @@
 									"font": "Arial;13;0",
 									"left": 1528,
 									"top": 768,
-									"width": 94.4326171875,
+									"width": 99.0791015625,
 									"height": 33,
 									"nameLabel": {
 										"$ref": "AAAAAAF6Myw2/wvsZI4="
@@ -1367,9 +1367,9 @@
 												"$ref": "AAAAAAF6Myx7dgv7DzU="
 											},
 											"font": "Arial;13;0",
-											"left": 1537.529541015625,
+											"left": 1538.196044921875,
 											"top": 847.5,
-											"width": 83.05908203125,
+											"width": 84.39208984375,
 											"height": 15,
 											"text": "如果使用rsync",
 											"wordWrap": true
@@ -1378,7 +1378,7 @@
 									"font": "Arial;13;0",
 									"left": 1496,
 									"top": 840,
-									"width": 166.1181640625,
+									"width": 168.7841796875,
 									"height": 30,
 									"nameLabel": {
 										"$ref": "AAAAAAF6Myx7dgv8qnc="
@@ -1403,7 +1403,7 @@
 											"font": "Arial;13;0",
 											"left": 1498,
 											"top": 914,
-											"width": 169.0380859375,
+											"width": 174.36376953125,
 											"height": 39,
 											"text": "将非innodb文件列表计算出来  保存在临时文件中  并做一次rsync拷贝",
 											"wordWrap": true
@@ -1412,7 +1412,7 @@
 									"font": "Arial;13;0",
 									"left": 1488,
 									"top": 904,
-									"width": 189.0380859375,
+									"width": 194.36376953125,
 									"height": 59,
 									"nameLabel": {
 										"$ref": "AAAAAAF6My2j6AwKqyg="
@@ -1631,7 +1631,7 @@
 										"$ref": "AAAAAAF6Myx7dgv7DzU="
 									},
 									"lineStyle": 2,
-									"points": "1661:854;1736:854;1736:1008;1664:1008",
+									"points": "1664:854;1736:854;1736:1008;1664:1008",
 									"nameLabel": {
 										"$ref": "AAAAAAF6MzAUmgxKCO4="
 									}
@@ -1655,7 +1655,7 @@
 											"font": "Arial;13;0",
 											"left": 1442,
 											"top": 1098,
-											"width": 292.55712890625,
+											"width": 301.72314453125,
 											"height": 26,
 											"text": "使用copy方式copy非innodb表文件  或者使用rsync方式再copy一次变化的非innodb文件",
 											"wordWrap": true
@@ -1664,7 +1664,7 @@
 									"font": "Arial;13;0",
 									"left": 1432,
 									"top": 1088,
-									"width": 312.55712890625,
+									"width": 321.72314453125,
 									"height": 59,
 									"nameLabel": {
 										"$ref": "AAAAAAF6MzB+aQxZ1ZM="
@@ -1768,7 +1768,7 @@
 											"font": "Arial;13;0",
 											"left": 1506,
 											"top": 1282,
-											"width": 160.34814453125,
+											"width": 160.8623046875,
 											"height": 39,
 											"text": "记录binlog位点  记录当前lsn  如果是slave同时写复制位点",
 											"wordWrap": true
@@ -1777,7 +1777,7 @@
 									"font": "Arial;13;0",
 									"left": 1496,
 									"top": 1272,
-									"width": 180.34814453125,
+									"width": 180.8623046875,
 									"height": 59,
 									"nameLabel": {
 										"$ref": "AAAAAAF6MzJ7IAx4Cdc="
@@ -1913,7 +1913,7 @@
 										"$ref": "AAAAAAF6MyNM9gvP7As="
 									},
 									"lineStyle": 2,
-									"points": "1341:920;1424:920;1424:800;1528:800",
+									"points": "1346:920;1424:920;1424:800;1528:800",
 									"nameLabel": {
 										"$ref": "AAAAAAF6MzTGkgyaHcw="
 									}
@@ -1958,7 +1958,7 @@
 										"$ref": "AAAAAAF6MzJ7IAx3pzs="
 									},
 									"lineStyle": 2,
-									"points": "1496:1328;1408:1328;1408:936;1341:936",
+									"points": "1496:1328;1408:1328;1408:936;1346:936",
 									"nameLabel": {
 										"$ref": "AAAAAAF6MzUMoAykeNU="
 									}
@@ -1982,7 +1982,7 @@
 											"font": "Arial;13;0",
 											"left": 1218,
 											"top": 986,
-											"width": 91.01904296875,
+											"width": 93.919921875,
 											"height": 13,
 											"text": "停redo拷贝线程",
 											"wordWrap": true
@@ -1991,7 +1991,7 @@
 									"font": "Arial;13;0",
 									"left": 1208,
 									"top": 976,
-									"width": 111.01904296875,
+									"width": 113.919921875,
 									"height": 33,
 									"nameLabel": {
 										"$ref": "AAAAAAF6MzWF9QyzmZ4="
@@ -2048,19 +2048,19 @@
 												"$ref": "AAAAAAF6Mzb7HgzIWvE="
 											},
 											"font": "Arial;13;0",
-											"left": 1218,
+											"left": 1170,
 											"top": 1106,
-											"width": 81.61181640625,
-											"height": 13,
-											"text": "释放备份/读锁",
+											"width": 182.0380859375,
+											"height": 26,
+											"text": "释放备份/读锁 如果有加锁的话 在包含非innodb表的部分会加锁",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 1208,
+									"left": 1160,
 									"top": 1096,
-									"width": 101.61181640625,
-									"height": 33,
+									"width": 202.0380859375,
+									"height": 59,
 									"nameLabel": {
 										"$ref": "AAAAAAF6Mzb7HgzJjok="
 									}
@@ -2549,7 +2549,7 @@
 											"visible": false,
 											"font": "Arial;13;0",
 											"left": 1275,
-											"top": 1145,
+											"top": 1158,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -2567,7 +2567,7 @@
 										"$ref": "AAAAAAF6Mzb7HgzIWvE="
 									},
 									"lineStyle": 2,
-									"points": "1261:1128;1261:1176",
+									"points": "1261:1154;1261:1176",
 									"nameLabel": {
 										"$ref": "AAAAAAF6MzheUQ06R7I="
 									}
@@ -3357,7 +3357,7 @@
 							"_parent": {
 								"$ref": "AAAAAAF6MZGMBgpeyLI="
 							},
-							"name": "释放备份/读锁",
+							"name": "释放备份/读锁 如果有加锁的话 在包含非innodb表的部分会加锁",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
